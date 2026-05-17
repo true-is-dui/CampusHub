@@ -1,7 +1,7 @@
 # 详细设计文档 — 校园互助服务平台（整合版）
 
-**版本：** 1.0
-**日期：** 2026-05-01
+**版本：** 2.0
+**日期：** 2026-05-17
 **团队：** true就是队
 
 > **独立交付物文件：**
@@ -25,7 +25,7 @@
 │  │ +id      │ publisher │ +id      │         │ +id      │               │
 │  │ +phone   │           │ +type    │         │ +status  │               │
 │  │ +studentId│          │ +title   │         │ +acceptor│               │
-│  │ +credits │           │ +credits │         │ +proof   │               │
+│  │          │           │+rewardAmt│         │ +proof   │               │
 │  └────┬─────┘           └────┬─────┘         └────┬─────┘               │
 │       │                      │                    │                      │
 │       │ 1                    │△                   │ 1                    │
@@ -42,12 +42,14 @@
 │                └────────┘│+tags  ││+imgs │                       │      │
 │                          └───────┘└──────┘                       │      │
 │                                                                  │      │
-│  ┌──────────┐     ┌──────────┐     ┌──────────┐                │      │
-│  │  Message │     │CheckIn   │     │CreditLog │                │      │
-│  │──────────│     │──────────│     │──────────│                │      │
-│  │ +content │     │ +date    │     │ +amount  │                │      │
-│  │ +type    │     │ +credits │     │ +reason  │                │      │
-│  └──────────┘     └──────────┘     └──────────┘                │      │
+│  ┌──────────┐     ┌──────────────┐                              │      │
+│  │  Message │     │PaymentRecord │                              │      │
+│  │──────────│     │──────────────│                              │      │
+│  │ +content │     │ +tradeNo     │                              │      │
+│  │ +type    │     │ +amount      │                              │      │
+│  └──────────┘     │ +status      │                              │      │
+│                   │ +paidAt      │                              │      │
+│                   └──────────────┘                              │      │
 │                                                                  │      │
 │  ┌──────────────┐     ┌──────────────┐                          │      │
 │  │ AdminAction  │     │ BrowseResult │                          │      │
@@ -76,7 +78,6 @@
 | nickname | String | 昵称 |
 | avatar | String | 头像URL |
 | bio | String | 个性签名 |
-| credits | Integer | 当前积分余额 |
 | certificationStatus | Enum | 未认证/已认证/审核中 |
 | role | Enum | 普通用户/管理员 |
 | createdAt | LocalDateTime | 注册时间 |
@@ -87,9 +88,6 @@
 | login(phone, password) | 密码登录 |
 | certify(studentId, realName) | 学号认证 |
 | updateProfile(nickname, avatar, bio) | 编辑个人资料 |
-| addCredits(amount, reason) | 增加积分（记录日志） |
-| deductCredits(amount, reason) | 扣减积分 |
-| dailyCheckIn() | 每日签到 |
 
 #### Task（任务基类 — 抽象类）
 
@@ -101,7 +99,7 @@
 | title | String | 任务标题 |
 | description | String | 任务描述 |
 | campus | String | 校区 |
-| credits | Integer | 报酬积分（可为0） |
+| rewardAmount | BigDecimal | 报酬金额，单位：元（可为0，仅ERRAND类型有效） |
 | status | TaskStatus(Enum) | 待接单/进行中/已完成/已取消 |
 | expiresAt | LocalDateTime | 有效期 |
 | createdAt | LocalDateTime | 创建时间 |
@@ -209,7 +207,7 @@
 |------|------|
 | accept(taskId, acceptorId) | 接单 |
 | uploadProof(imageUrl) | 上传完成凭证 |
-| confirmComplete() | 确认完成（转移积分） |
+| confirmComplete() | 确认完成（触发支付宝转账至接单方） |
 | cancel(reason) | 取消订单 |
 
 #### Review（评价）
@@ -243,26 +241,31 @@
 | isRead | Boolean | 是否已读 |
 | createdAt | LocalDateTime | 发送时间 |
 
-#### CheckIn（签到记录）
+#### PaymentRecord（支付记录）
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
 | id | Long | 主键 |
-| userId | Long | 用户ID |
-| checkInDate | LocalDate | 签到日期 |
-| creditsEarned | Integer | 获得积分 |
-| createdAt | LocalDateTime | 签到时间 |
+| orderId | Long | 关联订单ID（FK → Order） |
+| payerId | Long | 付款方ID（发布者） |
+| payeeId | Long | 收款方ID（接单者） |
+| amount | BigDecimal | 支付金额，单位：元 |
+| tradeNo | String | 支付宝交易号 |
+| outTradeNo | String | 商户订单号（平台生成） |
+| status | Enum | WAITING_PAY/PAID/TRANSFERRED/REFUNDED/FAILED |
+| paidAt | LocalDateTime | 支付时间（发布者付款） |
+| transferredAt | LocalDateTime | 转账时间（确认完成后转至接单方） |
+| refundNo | String | 退款交易号 |
+| refundedAt | LocalDateTime | 退款时间 |
+| notifyUrl | String | 异步通知回调地址 |
+| createdAt | LocalDateTime | 创建时间 |
 
-#### CreditLog（积分日志）
-
-| 属性 | 类型 | 说明 |
-|------|------|------|
-| id | Long | 主键 |
-| userId | Long | 用户ID |
-| amount | Integer | 变动数量（正=获得，负=消耗） |
-| reason | Enum | 认证奖励/签到/完成任务/发布任务冻结/回答被采纳/申诉扣分 |
-| refId | Long | 关联业务ID |
-| createdAt | LocalDateTime | 变动时间 |
+| 方法 | 说明 |
+|------|------|
+| createPayment(orderId, amount) | 创建支付宝预支付（当报酬>0时） |
+| handlePayCallback(notifyParams) | 处理支付宝异步支付回调 |
+| transferToPayee() | 确认完成后转账至接单方支付宝账户 |
+| refund(reason) | 取消订单时退款至发布者 |
 
 #### AdminAction（管理操作记录）
 
@@ -312,7 +315,7 @@
 | SOLID 原则 | 检查问题 | AI 设计是否违反 | 违反说明 | 修正方案 |
 |-----------|---------|--------------|---------|---------|
 | **S - 单一职责** | Task类是否承担了过多职责？ | ⚠️ 是 | AI将所有任务类型的逻辑（跑腿、招募、商品）塞进一个Task类，通过type字段和if-else区分。Task类既要处理跑腿的地点验证，又要处理招募的标签匹配，还要处理商品的图片管理 | 将Task改为抽象基类，ErrandTask、LostFoundItem、MatchRecruit、SecondhandItem各自继承或独立实现，各自负责自己的业务逻辑 |
-| **S - 单一职责** | User类是否混入了积分管理逻辑？ | ⚠️ 是 | AI将积分计算（签到判断、奖励规则）写死在User类中，积分规则变更需要修改User类 | 将CheckIn和CreditLog独立为单独类，积分规则通过CreditService统一管理 |
+| **S - 单一职责** | User类是否混入了支付管理逻辑？ | ⚠️ 是 | AI将支付计算（报酬冻结、转账规则）写死在User类中，支付规则变更需要修改User类 | 将支付逻辑独立为PaymentService，通过支付宝沙箱SDK处理支付/转账/退款，User类只负责身份认证和个人信息管理 |
 | **O - 开闭原则** | 新增需求类型是否需要修改现有代码？ | ⚠️ 是 | AI使用Task.type枚举+switch-case区分任务类型，每新增一种任务需修改枚举和所有switch分支 | 使用策略模式（TaskStrategy接口），每种任务类型一个策略实现。新增类型只需新增一个策略类，符合开闭原则 |
 | **L - 里氏替换** | 子类是否可以替换父类使用？ | ✅ 否 | AI生成的ErrandTask继承Task，没有重写破坏父类契约的方法。validate()在子类中扩展而非覆盖 | — |
 | **I - 接口隔离** | 有没有接口太"胖"？ | ⚠️ 是 | AI设计了一个ITaskService接口，包含发布跑腿、发布失物、发布搭子、发布二手、发布问答等10+方法。失物招领模块的实现者被迫依赖跑腿相关方法 | 按模块拆分为IErrandService、ILostFoundService、IMatchService、ISecondhandService、ICommentService等独立接口，每个实现类只关注自己的接口 |
@@ -408,8 +411,8 @@ AI原始设计（违反OCP）:
      ┌─────┼─────┬──────────┐
      ▼     ▼     ▼          ▼
   ┌────┐┌────┐┌──────┐┌──────────┐
-  │通知 ││缓存││积分  ││评价提醒   │
-  │推送 ││更新││转移  ││(48小时)   │
+  │通知 ││缓存││支付  ││评价提醒   │
+  │推送 ││更新││转账  ││(48小时)   │
   │监听 ││监听││监听  ││监听      │
   └────┘└────┘└──────┘└──────────┘
 ```
@@ -420,7 +423,7 @@ AI原始设计（违反OCP）:
 - 未来新增监听器（如数据埋点、运营统计）无需修改OrderService
 
 **不用会怎样？**
-- OrderService中需要显式调用通知推送、缓存刷新、积分转移等多个方法
+- OrderService中需要显式调用通知推送、缓存刷新、支付转账等多个方法
 - 每新增一个副作用就要改一次OrderService
 - 方法体膨胀到50+行，测试困难
 
@@ -503,6 +506,7 @@ AI原始设计（违反OCP）:
 | 401 | 未认证 / Token过期 |
 | 404 | 资源不存在 |
 | 409 | 业务冲突（如重复接单、学号已注册） |
+| 422 | 支付失败（支付宝沙箱调用失败、余额不足等） |
 | 429 | 请求频率超限 |
 | 500 | 服务器内部错误 |
 
@@ -559,7 +563,6 @@ Response (200):
     "token": "eyJhbGciOiJIUzI1NiIs...",
     "nickname": "张三",
     "avatar": "https://cdn.campushub.cn/avatars/1001.jpg",
-    "credits": 150,
     "certificationStatus": "CERTIFIED"
   }
 }
@@ -590,8 +593,7 @@ Response (200):
   "message": "认证成功",
   "data": {
     "studentId": "2024****0001",
-    "certificationStatus": "CERTIFIED",
-    "creditsReward": 10
+    "certificationStatus": "CERTIFIED"
   }
 }
 
@@ -618,7 +620,7 @@ Content-Type: application/json
 | title | String | 是 | 标题 |
 | description | String | 否 | 描述 |
 | campus | String | 否 | 校区（问答类型可不填） |
-| credits | Integer | 否 | 报酬积分，默认0（仅ERRAND类型有效，其他类型忽略） |
+| rewardAmount | BigDecimal | 否 | 报酬金额（元），默认0（仅ERRAND类型有效，其他类型忽略。>0时需支付宝支付） |
 | expiresInHours | Integer | 否 | 有效期（小时），默认24 |
 | extra | Object | 是 | 类型特有字段，见下表 |
 
@@ -639,7 +641,7 @@ Content-Type: application/json
   "title": "帮取韵达快递",
   "description": "3号韵达快递站，小件",
   "campus": "南校区",
-  "credits": 10,
+  "rewardAmount": 5.00,
   "expiresInHours": 24,
   "extra": {
     "pickupLocation": "韵达快递站",
@@ -723,12 +725,21 @@ Response (200):
   }
 }
 
-Response (400):
+Response (200, 含支付):
 {
-  "code": 400,
-  "message": "积分不足",
-  "data": { "required": 10, "available": 5 }
+  "code": 200,
+  "message": "发布成功，需完成支付",
+  "data": {
+    "taskId": 2001,
+    "status": "PENDING_PAYMENT",
+    "paymentUrl": "https://openapi.alipay.com/gateway.do?...",
+    "outTradeNo": "CH20260501103000001",
+    "createdAt": "2026-05-01T10:30:00"
+  }
 }
+
+说明：rewardAmount > 0 时，发布后需跳转支付宝沙箱完成付款，
+付款成功后任务状态变为 PENDING（待接单）。rewardAmount = 0 时直接发布成功。
 ```
 
 #### 接口 5：浏览需求列表
@@ -748,7 +759,7 @@ Response (200):
         "title": "帮取韵达快递",
         "description": "3号韵达快递站，小件",
         "campus": "南校区",
-        "credits": 10,
+        "rewardAmount": 5.00,
         "status": "PENDING",
         "publisher": {
           "userId": 1001,
@@ -770,7 +781,7 @@ Response (200):
   type      可选  ERRAND / LOST_FOUND / MATCH / SECONDHAND / QA
   campus    可选  校区名称
   keyword   可选  搜索关键词
-  sort      可选  latest(默认) / credits_desc / expiring_soon
+  sort      可选  latest(默认) / reward_desc / expiring_soon
   page      可选  页码(默认1)
   pageSize  可选  每页数量(默认20, 最大50)
 ```
@@ -820,7 +831,7 @@ Response (200):
       "taskId": 2001,
       "type": "ERRAND",
       "title": "帮取韵达快递",
-      "credits": 10
+      "rewardAmount": 5.00
     },
     "publisher": {
       "userId": 1001,
@@ -990,8 +1001,7 @@ Response (200):
   "message": "已选为最佳回答",
   "data": {
     "commentId": 8001,
-    "targetId": 6001,
-    "answererCreditsReward": 10
+    "targetId": 6001
   }
 }
 
@@ -1180,6 +1190,108 @@ Response (400):
 { "code": 400, "message": "处理理由不能为空" }
 ```
 
+#### 接口 21：支付宝异步回调（无需认证）
+
+```
+POST /api/v1/payments/alipay/notify
+Content-Type: application/x-www-form-urlencoded
+
+参数（支付宝标准异步通知参数）:
+  out_trade_no   商户订单号
+  trade_no       支付宝交易号
+  trade_status   交易状态（TRADE_SUCCESS / TRADE_FINISHED）
+  total_amount   交易金额
+  sign           签名
+  sign_type      RSA2
+
+处理逻辑:
+1. 验证签名（防伪造）
+2. 根据 out_trade_no 找到对应订单
+3. 更新 PaymentRecord 状态为 PAID
+4. 更新 Task 状态为 PENDING（待接单）
+5. 返回 "success" 给支付宝（必须，否则会重复通知）
+
+Response: 返回纯文本 "success"
+```
+
+#### 接口 22：查询支付状态
+
+```
+GET /api/v1/payments/{outTradeNo}
+Authorization: Bearer <token>
+
+Response (200):
+{
+  "code": 200,
+  "data": {
+    "outTradeNo": "CH20260501103000001",
+    "tradeNo": "2026050122001400001",
+    "amount": 5.00,
+    "status": "PAID",
+    "paidAt": "2026-05-01T10:35:00"
+  }
+}
+
+status: WAITING_PAY / PAID / TRANSFERRED / REFUNDED / FAILED
+```
+
+#### 接口 23：确认完成并转账
+
+```
+POST /api/v1/orders/{orderId}/confirm
+Authorization: Bearer <token>
+
+说明: 发布方确认任务完成。若报酬>0，系统通过支付宝沙箱
+      将报酬从平台中间账户转账至接单方支付宝账户。
+
+Response (200):
+{
+  "code": 200,
+  "message": "确认完成，转账已发起",
+  "data": {
+    "orderId": 3001,
+    "status": "COMPLETED",
+    "transferStatus": "PROCESSING",
+    "amount": 5.00
+  }
+}
+
+Response (400):
+{ "code": 400, "message": "订单状态不允许确认完成" }
+
+Response (400):
+{ "code": 400, "message": "只有发布方可以确认完成" }
+```
+
+#### 接口 24：退款（取消订单时）
+
+```
+POST /api/v1/payments/{outTradeNo}/refund
+Authorization: Bearer <token>
+Content-Type: application/json
+
+Request:
+{
+  "reason": "任务取消，申请退款"
+}
+
+说明: 接单前取消订单时，将已支付的报酬原路退回至发布方支付宝账户。
+
+Response (200):
+{
+  "code": 200,
+  "message": "退款已发起",
+  "data": {
+    "outTradeNo": "CH20260501103000001",
+    "refundAmount": 5.00,
+    "refundStatus": "PROCESSING"
+  }
+}
+
+Response (400):
+{ "code": 400, "message": "该订单不支持退款" }
+```
+
 ### 4.4 AI 辅助实验记录
 
 **AI 生成 API 的典型问题：**
@@ -1218,39 +1330,39 @@ Response (400):
 │ realName│       │ accepted │       │ rating   │
 │ nickname│       │ complete │       │ comment  │
 │ avatar  │       │ proof    │       │ appealed │
-│ credits │       │ createdAt│      │ createdAt│
-│ certStat│       └──────────┘       └──────────┘
-│ role    │
-│ createdAt│      ┌──────────┐       ┌──────────┐
-└────┬─────┘      │  Message │       │ CheckIn  │
-     │            │──────────│       │──────────│
-     │            │ PK id    │       │ PK id    │
-     │ 1       *  │ FK orderId│      │ FK userId│
-     └────────────│ FK sender│       │ checkDate│
-                  │ FK receiv│       │ credits  │
-                  │ content  │       │ createdAt│
-                  │ type     │       └──────────┘
-                  │ isRead   │
-                  │ createdAt│       ┌──────────┐
-                  └──────────┘       │CreditLog │
-                                     │──────────│
-     ┌──────────┐                    │ PK id    │
-     │  Match   │                    │ FK userId│
-     │──────────│                    │ amount   │
-     │ PK id    │                    │ reason   │
-     │ FK pubId │                    │ refId    │
-     │ actType  │                    │ createdAt│
-     │ title    │                    └──────────┘
-     │ desc     │
-     │ time     │   ┌──────────┐    ┌──────────┐
-     │ location │   │  Match   │    │ SecondHnd│
-     │ maxNum   │   │Participant│   │──────────│
-     │ tags     │   │──────────│    │ PK id    │
-     │ status   │   │ PK id    │    │ FK sellId│
-     │ createdAt│   │ FK recruit│   │ name     │
-     └──────────┘   │ FK userId│    │ desc     │
-                    │ status   │    │ price    │
-                    │ createdAt│   │ images   │
+│ certStat│       │ createdAt│       │ createdAt│
+│ role    │       └──────┬───┘       └──────────┘
+│ createdAt│              │
+└────┬─────┘      ┌──────┴───────┐       ┌──────────┐
+     │            │PaymentRecord │       │  Message │
+     │ 1       *  │──────────────│       │──────────│
+     └────────────│ PK id        │       │ PK id    │
+                  │ FK orderId   │       │ FK orderId│
+                  │ FK payerId   │       │ FK sender│
+                  │ FK payeeId   │       │ FK receiv│
+                  │ amount       │       │ content  │
+                  │ tradeNo      │       │ type     │
+                  │ status       │       │ isRead   │
+                  │ paidAt       │       │ createdAt│
+                  │ transferredAt│       └──────────┘
+                  │ refundedAt   │
+                  │ createdAt    │
+                  └──────────────┘
+     ┌──────────┐
+     │  Match   │    ┌──────────┐
+     │──────────│    │ SecondHnd│
+     │ PK id    │    │──────────│
+     │ FK pubId │    │ PK id    │
+     │ actType  │    │ FK sellId│
+     │ title    │    │ name     │
+     │ desc     │    │ desc     │
+     │ time     │    │ price    │
+     │ location │    │ images   │
+     │ maxNum   │    │ tradeLoc │
+     │ tags     │    │ status   │
+     │ status   │    │ createdAt│
+     │ createdAt│    └──────────┘
+     └──────────┘
      ┌──────────┐   └──────────┘   │ tradeLoc │
      │LostFound │                  │ status   │
      │──────────│   ┌──────────┐   │ createdAt│
@@ -1317,7 +1429,6 @@ CREATE TABLE users (
     nickname VARCHAR(50) NOT NULL DEFAULT '' COMMENT '昵称',
     avatar VARCHAR(255) COMMENT '头像URL',
     bio VARCHAR(200) COMMENT '个性签名',
-    credits INT NOT NULL DEFAULT 0 COMMENT '积分余额',
     certification_status ENUM('UNCERTIFIED','PENDING','CERTIFIED') NOT NULL DEFAULT 'UNCERTIFIED',
     role ENUM('USER','ADMIN') NOT NULL DEFAULT 'USER',
     banned_until DATETIME COMMENT '封禁截止时间，NULL表示未封禁',
@@ -1335,7 +1446,7 @@ CREATE TABLE errand_tasks (
     title VARCHAR(100) NOT NULL,
     description VARCHAR(500),
     campus VARCHAR(50) NOT NULL COMMENT '校区',
-    credits INT NOT NULL DEFAULT 0 COMMENT '报酬积分，可为0',
+    reward_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT '报酬金额（元），可为0，>0时需支付宝支付',
     pickup_location VARCHAR(200) NOT NULL COMMENT '取件地点',
     delivery_location VARCHAR(200) NOT NULL COMMENT '送达地点',
     item_description VARCHAR(300) COMMENT '物品描述',
@@ -1488,31 +1599,33 @@ CREATE TABLE messages (
     INDEX idx_receiver_read (receiver_id, is_read, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='即时通讯消息表';
 
--- 11. 签到记录表
-CREATE TABLE check_ins (
+-- 11. 支付记录表（支付宝沙箱）
+CREATE TABLE payment_records (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id BIGINT NOT NULL,
-    check_in_date DATE NOT NULL COMMENT '签到日期',
-    credits_earned INT NOT NULL DEFAULT 5,
+    order_id BIGINT NOT NULL COMMENT '关联订单ID',
+    payer_id BIGINT NOT NULL COMMENT '付款方（发布者）',
+    payee_id BIGINT NOT NULL COMMENT '收款方（接单者）',
+    amount DECIMAL(10,2) NOT NULL COMMENT '支付金额（元）',
+    out_trade_no VARCHAR(64) NOT NULL UNIQUE COMMENT '商户订单号（平台生成）',
+    trade_no VARCHAR(64) COMMENT '支付宝交易号',
+    status ENUM('WAITING_PAY','PAID','TRANSFERRED','REFUNDED','FAILED') NOT NULL DEFAULT 'WAITING_PAY',
+    paid_at DATETIME COMMENT '支付时间',
+    transferred_at DATETIME COMMENT '转账至接单方时间',
+    refund_no VARCHAR(64) COMMENT '退款交易号',
+    refunded_at DATETIME COMMENT '退款时间',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    UNIQUE KEY uk_user_date (user_id, check_in_date)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='签到记录表';
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (order_id) REFERENCES orders(id),
+    FOREIGN KEY (payer_id) REFERENCES users(id),
+    FOREIGN KEY (payee_id) REFERENCES users(id),
+    INDEX idx_out_trade_no (out_trade_no),
+    INDEX idx_trade_no (trade_no),
+    INDEX idx_payer (payer_id),
+    INDEX idx_payee (payee_id),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='支付宝沙箱支付记录表';
 
--- 12. 积分日志表
-CREATE TABLE credit_logs (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id BIGINT NOT NULL,
-    amount INT NOT NULL COMMENT '变动数量，正为获得，负为消耗',
-    reason ENUM('CERTIFY','CHECK_IN','TASK_REWARD','TASK_FREEZE','TASK_UNFREEZE','ANSWER_ADOPTED','APPEAL_PENALTY') NOT NULL,
-    ref_id BIGINT COMMENT '关联业务ID',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    INDEX idx_user_time (user_id, created_at DESC),
-    INDEX idx_reason (reason)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='积分变动日志表';
-
--- 13. 管理操作日志表
+-- 12. 管理操作日志表
 CREATE TABLE admin_audit_log (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     admin_id BIGINT NOT NULL COMMENT '操作管理员ID',
@@ -1572,8 +1685,9 @@ CREATE TABLE comments (
 | messages | `idx_order_time` | 按订单查询聊天记录，按时间排序 |
 | messages | `idx_receiver_read` | 查询未读消息数量 |
 | reviews | `uk_order_reviewer` | 一个订单每人只能评价一次 |
-| check_ins | `uk_user_date` | 同一天不可重复签到 |
-| credit_logs | `idx_user_time` | 查看"我的积分流水" |
+| payment_records | `idx_out_trade_no` | 按商户订单号查询支付状态（支付宝回调时用） |
+| payment_records | `idx_trade_no` | 按支付宝交易号查询 |
+| payment_records | `idx_payer / idx_payee` | 查看"我发起的支付"/"我收到的转账" |
 | admin_audit_log | `idx_admin` | 按管理员查询操作记录 |
 | admin_audit_log | `idx_target` | 按目标查询被操作历史 |
 
@@ -1597,6 +1711,6 @@ CREATE TABLE comments (
 | orders表通过task_id间接关联publisher | AI建议冗余publisher_id | 接受 | 冗余publisher_id可避免join查询 |
 | messages表消息量可能很大 | AI建议按月分表 | 暂不接受 | MVP阶段消息量可控，预留归档策略 |
 | review表缺少is_appealed字段 | AI建议补充申诉标记 | 接受 | 已补充 |
-| credit_logs缺少refId | AI建议补充关联ID | 接受 | 已补充，方便追溯积分变动来源 |
+| payment_records需支持幂等 | AI建议out_trade_no加唯一索引防重复支付 | 接受 | out_trade_no已设UNIQUE，支付宝回调需幂等处理 |
 | errand_tasks的campus字段 | AI建议独立为campus表+N对1 | 不接受 | 校区数量极少（2-3个），枚举或字符串即可 |
 | answers表独立存在 | AI为问答模块设计了独立的answers表 | 不接受 | 问答回答合并至comments表，通过targetType=QA区分，is_best标记最佳回答，减少表数量 |

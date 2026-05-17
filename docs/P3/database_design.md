@@ -1,7 +1,7 @@
 # 数据库设计 — 校园互助服务平台
 
-**版本：** 1.0
-**日期：** 2026-05-01
+**版本：** 2.0
+**日期：** 2026-05-17
 **团队：** true就是队
 
 ---
@@ -19,39 +19,39 @@
 │ realName│       │ accepted │       │ rating   │
 │ nickname│       │ complete │       │ comment  │
 │ avatar  │       │ proof    │       │ appealed │
-│ credits │       │ createdAt│      │ createdAt│
-│ certStat│       └──────────┘       └──────────┘
-│ role    │
-│ createdAt│      ┌──────────┐       ┌──────────┐
-└────┬─────┘      │  Message │       │ CheckIn  │
-     │            │──────────│       │──────────│
-     │            │ PK id    │       │ PK id    │
-     │ 1       *  │ FK orderId│      │ FK userId│
-     └────────────│ FK sender│       │ checkDate│
-                  │ FK receiv│       │ credits  │
-                  │ content  │       │ createdAt│
-                  │ type     │       └──────────┘
-                  │ isRead   │
-                  │ createdAt│       ┌──────────┐
-                  └──────────┘       │CreditLog │
-                                     │──────────│
-     ┌──────────┐                    │ PK id    │
-     │  Match   │                    │ FK userId│
-     │──────────│                    │ amount   │
-     │ PK id    │                    │ reason   │
-     │ FK pubId │                    │ refId    │
-     │ actType  │                    │ createdAt│
-     │ title    │                    └──────────┘
-     │ desc     │
-     │ time     │   ┌──────────┐    ┌──────────┐
-     │ location │   │  Match   │    │ SecondHnd│
-     │ maxNum   │   │Participant│   │──────────│
-     │ tags     │   │──────────│    │ PK id    │
-     │ status   │   │ PK id    │    │ FK sellId│
-     │ createdAt│   │ FK recruit│   │ name     │
-     └──────────┘   │ FK userId│    │ desc     │
-                    │ status   │    │ price    │
-                    │ createdAt│   │ images   │
+│ certStat│       │ createdAt│       │ createdAt│
+│ role    │       └──────┬───┘       └──────────┘
+│ createdAt│              │
+└────┬─────┘      ┌──────┴───────┐       ┌──────────┐
+     │            │PaymentRecord │       │  Message │
+     │ 1       *  │──────────────│       │──────────│
+     └────────────│ PK id        │       │ PK id    │
+                  │ FK orderId   │       │ FK orderId│
+                  │ FK payerId   │       │ FK sender│
+                  │ FK payeeId   │       │ FK receiv│
+                  │ amount       │       │ content  │
+                  │ tradeNo      │       │ type     │
+                  │ status       │       │ isRead   │
+                  │ paidAt       │       │ createdAt│
+                  │ transferredAt│       └──────────┘
+                  │ refundedAt   │
+                  │ createdAt    │
+                  └──────────────┘
+     ┌──────────┐
+     │  Match   │    ┌──────────┐
+     │──────────│    │ SecondHnd│
+     │ PK id    │    │──────────│
+     │ FK pubId │    │ PK id    │
+     │ actType  │    │ FK sellId│
+     │ title    │    │ name     │
+     │ desc     │    │ desc     │
+     │ time     │    │ price    │
+     │ location │    │ images   │
+     │ maxNum   │    │ tradeLoc │
+     │ tags     │    │ status   │
+     │ status   │    │ createdAt│
+     │ createdAt│    └──────────┘
+     └──────────┘
      ┌──────────┐   └──────────┘   │ tradeLoc │
      │LostFound │                  │ status   │
      │──────────│   ┌──────────┐   │ createdAt│
@@ -120,7 +120,6 @@ CREATE TABLE users (
     nickname VARCHAR(50) NOT NULL DEFAULT '' COMMENT '昵称',
     avatar VARCHAR(255) COMMENT '头像URL',
     bio VARCHAR(200) COMMENT '个性签名',
-    credits INT NOT NULL DEFAULT 0 COMMENT '积分余额',
     certification_status ENUM('UNCERTIFIED','PENDING','CERTIFIED') NOT NULL DEFAULT 'UNCERTIFIED',
     role ENUM('USER','ADMIN') NOT NULL DEFAULT 'USER',
     banned_until DATETIME COMMENT '封禁截止时间，NULL表示未封禁',
@@ -138,7 +137,7 @@ CREATE TABLE errand_tasks (
     title VARCHAR(100) NOT NULL,
     description VARCHAR(500),
     campus VARCHAR(50) NOT NULL COMMENT '校区',
-    credits INT NOT NULL DEFAULT 0 COMMENT '报酬积分，可为0',
+    reward_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT '报酬金额（元），可为0，>0时需支付宝支付',
     pickup_location VARCHAR(200) NOT NULL COMMENT '取件地点',
     delivery_location VARCHAR(200) NOT NULL COMMENT '送达地点',
     item_description VARCHAR(300) COMMENT '物品描述',
@@ -291,31 +290,33 @@ CREATE TABLE messages (
     INDEX idx_receiver_read (receiver_id, is_read, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='即时通讯消息表';
 
--- 11. 签到记录表
-CREATE TABLE check_ins (
+-- 11. 支付记录表（支付宝沙箱）
+CREATE TABLE payment_records (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id BIGINT NOT NULL,
-    check_in_date DATE NOT NULL COMMENT '签到日期',
-    credits_earned INT NOT NULL DEFAULT 5,
+    order_id BIGINT NOT NULL COMMENT '关联订单ID',
+    payer_id BIGINT NOT NULL COMMENT '付款方（发布者）',
+    payee_id BIGINT NOT NULL COMMENT '收款方（接单者）',
+    amount DECIMAL(10,2) NOT NULL COMMENT '支付金额（元）',
+    out_trade_no VARCHAR(64) NOT NULL UNIQUE COMMENT '商户订单号（平台生成）',
+    trade_no VARCHAR(64) COMMENT '支付宝交易号',
+    status ENUM('WAITING_PAY','PAID','TRANSFERRED','REFUNDED','FAILED') NOT NULL DEFAULT 'WAITING_PAY',
+    paid_at DATETIME COMMENT '支付时间',
+    transferred_at DATETIME COMMENT '转账至接单方时间',
+    refund_no VARCHAR(64) COMMENT '退款交易号',
+    refunded_at DATETIME COMMENT '退款时间',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    UNIQUE KEY uk_user_date (user_id, check_in_date)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='签到记录表';
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (order_id) REFERENCES orders(id),
+    FOREIGN KEY (payer_id) REFERENCES users(id),
+    FOREIGN KEY (payee_id) REFERENCES users(id),
+    INDEX idx_out_trade_no (out_trade_no),
+    INDEX idx_trade_no (trade_no),
+    INDEX idx_payer (payer_id),
+    INDEX idx_payee (payee_id),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='支付宝沙箱支付记录表';
 
--- 12. 积分日志表
-CREATE TABLE credit_logs (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id BIGINT NOT NULL,
-    amount INT NOT NULL COMMENT '变动数量，正为获得，负为消耗',
-    reason ENUM('CERTIFY','CHECK_IN','TASK_REWARD','TASK_FREEZE','TASK_UNFREEZE','ANSWER_ADOPTED','APPEAL_PENALTY') NOT NULL,
-    ref_id BIGINT COMMENT '关联业务ID',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    INDEX idx_user_time (user_id, created_at DESC),
-    INDEX idx_reason (reason)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='积分变动日志表';
-
--- 13. 管理操作日志表
+-- 12. 管理操作日志表
 CREATE TABLE admin_audit_log (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     admin_id BIGINT NOT NULL COMMENT '操作管理员ID',
@@ -377,8 +378,9 @@ CREATE TABLE comments (
 | messages | `idx_order_time` | 按订单查询聊天记录，按时间排序 |
 | messages | `idx_receiver_read` | 查询未读消息数量 |
 | reviews | `uk_order_reviewer` | 一个订单每人只能评价一次 |
-| check_ins | `uk_user_date` | 同一天不可重复签到 |
-| credit_logs | `idx_user_time` | 查看"我的积分流水" |
+| payment_records | `idx_out_trade_no` | 按商户订单号查询支付状态（支付宝回调时用） |
+| payment_records | `idx_trade_no` | 按支付宝交易号查询 |
+| payment_records | `idx_payer / idx_payee` | 查看"我发起的支付"/"我收到的转账" |
 | admin_audit_log | `idx_admin` | 按管理员查询操作记录 |
 | admin_audit_log | `idx_target` | 按目标查询被操作历史 |
 
@@ -406,5 +408,5 @@ CREATE TABLE comments (
 | orders表通过task_id间接关联publisher | AI建议冗余publisher_id | 接受 | 冗余publisher_id可避免join查询 |
 | messages表消息量可能很大 | AI建议按月分表 | 暂不接受 | MVP阶段消息量可控，预留归档策略 |
 | review表缺少is_appealed字段 | AI建议补充申诉标记 | 接受 | 已补充 |
-| credit_logs缺少refId | AI建议补充关联ID | 接受 | 已补充，方便追溯积分变动来源 |
+| payment_records需支持幂等 | AI建议out_trade_no加唯一索引防重复支付 | 接受 | out_trade_no已设UNIQUE，支付宝回调需幂等处理 |
 | errand_tasks的campus字段 | AI建议独立为campus表+N对1 | 不接受 | 校区数量极少（2-3个），枚举或字符串即可 |

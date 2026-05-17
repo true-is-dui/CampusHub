@@ -1,7 +1,7 @@
 # 核心类图设计 — 校园互助服务平台
 
-**版本：** 1.0
-**日期：** 2026-05-01
+**版本：** 2.0
+**日期：** 2026-05-17
 **团队：** true就是队
 
 ---
@@ -20,7 +20,7 @@
 │  │ +id      │ publisher │ +id      │         │ +id      │               │
 │  │ +phone   │           │ +type    │         │ +status  │               │
 │  │ +studentId│          │ +title   │         │ +acceptor│               │
-│  │ +credits │           │ +credits │         │ +proof   │               │
+│  │          │           │+rewardAmt│         │ +proof   │               │
 │  └────┬─────┘           └────┬─────┘         └────┬─────┘               │
 │       │                      │                    │                      │
 │       │ 1                    │△                   │ 1                    │
@@ -37,12 +37,14 @@
 │                └────────┘│+tags  ││+imgs │                       │      │
 │                          └───────┘└──────┘                       │      │
 │                                                                  │      │
-│  ┌──────────┐     ┌──────────┐     ┌──────────┐                │      │
-│  │  Message │     │CheckIn   │     │CreditLog │                │      │
-│  │──────────│     │──────────│     │──────────│                │      │
-│  │ +content │     │ +date    │     │ +amount  │                │      │
-│  │ +type    │     │ +credits │     │ +reason  │                │      │
-│  └──────────┘     └──────────┘     └──────────┘                │      │
+│  ┌──────────┐     ┌──────────────┐                              │      │
+│  │  Message │     │PaymentRecord │                              │      │
+│  │──────────│     │──────────────│                              │      │
+│  │ +content │     │ +tradeNo     │                              │      │
+│  │ +type    │     │ +amount      │                              │      │
+│  └──────────┘     │ +status      │                              │      │
+│                   │ +paidAt      │                              │      │
+│                   └──────────────┘                              │      │
 │                                                                  │      │
 │  ┌──────────────┐     ┌──────────────┐                          │      │
 │  │ AdminAction  │     │ BrowseResult │                          │      │
@@ -71,7 +73,6 @@
 | nickname | String | 昵称 |
 | avatar | String | 头像URL |
 | bio | String | 个性签名 |
-| credits | Integer | 当前积分余额 |
 | certificationStatus | Enum | 未认证/已认证/审核中 |
 | role | Enum | 普通用户/管理员 |
 | createdAt | LocalDateTime | 注册时间 |
@@ -82,9 +83,6 @@
 | login(phone, password) | 密码登录 |
 | certify(studentId, realName) | 学号认证 |
 | updateProfile(nickname, avatar, bio) | 编辑个人资料 |
-| addCredits(amount, reason) | 增加积分（记录日志） |
-| deductCredits(amount, reason) | 扣减积分 |
-| dailyCheckIn() | 每日签到 |
 
 #### Task（任务基类 — 抽象类）
 
@@ -96,7 +94,7 @@
 | title | String | 任务标题 |
 | description | String | 任务描述 |
 | campus | String | 校区 |
-| credits | Integer | 报酬积分（可为0） |
+| rewardAmount | BigDecimal | 报酬金额，单位：元（可为0，仅ERRAND类型有效） |
 | status | TaskStatus(Enum) | 待接单/进行中/已完成/已取消 |
 | expiresAt | LocalDateTime | 有效期 |
 | createdAt | LocalDateTime | 创建时间 |
@@ -204,7 +202,7 @@
 |------|------|
 | accept(taskId, acceptorId) | 接单 |
 | uploadProof(imageUrl) | 上传完成凭证 |
-| confirmComplete() | 确认完成（转移积分） |
+| confirmComplete() | 确认完成（触发支付宝转账至接单方） |
 | cancel(reason) | 取消订单 |
 
 #### Review（评价）
@@ -238,26 +236,29 @@
 | isRead | Boolean | 是否已读 |
 | createdAt | LocalDateTime | 发送时间 |
 
-#### CheckIn（签到记录）
+#### PaymentRecord（支付记录）
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
 | id | Long | 主键 |
-| userId | Long | 用户ID |
-| checkInDate | LocalDate | 签到日期 |
-| creditsEarned | Integer | 获得积分 |
-| createdAt | LocalDateTime | 签到时间 |
+| orderId | Long | 关联订单ID（FK → Order） |
+| payerId | Long | 付款方ID（发布者） |
+| payeeId | Long | 收款方ID（接单者） |
+| amount | BigDecimal | 支付金额，单位：元 |
+| tradeNo | String | 支付宝交易号 |
+| outTradeNo | String | 商户订单号（平台生成） |
+| status | Enum | WAITING_PAY/PAID/TRANSFERRED/REFUNDED/FAILED |
+| paidAt | LocalDateTime | 支付时间 |
+| transferredAt | LocalDateTime | 转账时间 |
+| refundedAt | LocalDateTime | 退款时间 |
+| createdAt | LocalDateTime | 创建时间 |
 
-#### CreditLog（积分日志）
-
-| 属性 | 类型 | 说明 |
-|------|------|------|
-| id | Long | 主键 |
-| userId | Long | 用户ID |
-| amount | Integer | 变动数量（正=获得，负=消耗） |
-| reason | Enum | 认证奖励/签到/完成任务/发布任务冻结/回答被采纳/申诉扣分 |
-| refId | Long | 关联业务ID |
-| createdAt | LocalDateTime | 变动时间 |
+| 方法 | 说明 |
+|------|------|
+| createPayment(orderId, amount) | 创建支付宝预支付 |
+| handlePayCallback(notifyParams) | 处理支付宝异步回调 |
+| transferToPayee() | 确认完成后转账至接单方 |
+| refund(reason) | 取消订单时退款 |
 
 #### AdminAction（管理操作记录）
 
@@ -307,7 +308,7 @@
 | SOLID 原则 | 检查问题 | AI 设计是否违反 | 违反说明 | 修正方案 |
 |-----------|---------|--------------|---------|---------|
 | **S - 单一职责** | Task类是否承担了过多职责？ | ⚠️ 是 | AI将所有任务类型的逻辑（跑腿、招募、商品）塞进一个Task类，通过type字段和if-else区分。Task类既要处理跑腿的地点验证，又要处理招募的标签匹配，还要处理商品的图片管理 | 将Task改为抽象基类，ErrandTask、LostFoundItem、MatchRecruit、SecondhandItem各自继承或独立实现，各自负责自己的业务逻辑 |
-| **S - 单一职责** | User类是否混入了积分管理逻辑？ | ⚠️ 是 | AI将积分计算（签到判断、奖励规则）写死在User类中，积分规则变更需要修改User类 | 将CheckIn和CreditLog独立为单独类，积分规则通过CreditService统一管理 |
+| **S - 单一职责** | User类是否混入了支付管理逻辑？ | ⚠️ 是 | AI将支付计算（报酬冻结、转账规则）写死在User类中，支付规则变更需要修改User类 | 将支付逻辑独立为PaymentService，通过支付宝沙箱SDK处理支付/转账/退款，User类只负责身份认证和个人信息管理 |
 | **O - 开闭原则** | 新增需求类型是否需要修改现有代码？ | ⚠️ 是 | AI使用Task.type枚举+switch-case区分任务类型，每新增一种任务需修改枚举和所有switch分支 | 使用策略模式（TaskStrategy接口），每种任务类型一个策略实现。新增类型只需新增一个策略类，符合开闭原则 |
 | **L - 里氏替换** | 子类是否可以替换父类使用？ | ✅ 否 | AI生成的ErrandTask继承Task，没有重写破坏父类契约的方法。validate()在子类中扩展而非覆盖 | — |
 | **I - 接口隔离** | 有没有接口太"胖"？ | ⚠️ 是 | AI设计了一个ITaskService接口，包含发布跑腿、发布失物、发布搭子、发布二手、发布问答等10+方法。失物招领模块的实现者被迫依赖跑腿相关方法 | 按模块拆分为IErrandService、ILostFoundService、IMatchService、ISecondhandService、ICommentService等独立接口，每个实现类只关注自己的接口 |
@@ -403,8 +404,8 @@ AI原始设计（违反OCP）:
      ┌─────┼─────┬──────────┐
      ▼     ▼     ▼          ▼
   ┌────┐┌────┐┌──────┐┌──────────┐
-  │通知 ││缓存││积分  ││评价提醒   │
-  │推送 ││更新││转移  ││(48小时)   │
+  │通知 ││缓存││支付  ││评价提醒   │
+  │推送 ││更新││转账  ││(48小时)   │
   │监听 ││监听││监听  ││监听      │
   └────┘└────┘└──────┘└──────────┘
 ```
@@ -415,7 +416,7 @@ AI原始设计（违反OCP）:
 - 未来新增监听器（如数据埋点、运营统计）无需修改OrderService
 
 **不用会怎样？**
-- OrderService中需要显式调用通知推送、缓存刷新、积分转移等多个方法
+- OrderService中需要显式调用通知推送、缓存刷新、支付转账等多个方法
 - 每新增一个副作用就要改一次OrderService
 - 方法体膨胀到50+行，测试困难
 

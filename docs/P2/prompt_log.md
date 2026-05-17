@@ -84,7 +84,7 @@
 ```
 
 **AI回答摘要：**
-建议"分层架构 + 事件驱动补充"。核心业务流程用分层，通知/积分变动用事件驱动。技术栈：Spring Boot + MySQL + Redis + RabbitMQ + WebSocket + Elasticsearch。模块分为6个核心域。质量属性建议包括可测试性（单元测试覆盖≥80%）、可维护性（统一代码规范）、安全性（JWT + HTTPS + 数据脱敏）。
+建议"分层架构 + 事件驱动补充"。核心业务流程用分层，通知/支付状态变更用事件驱动。技术栈：Spring Boot + MySQL + Redis + RabbitMQ + WebSocket + Elasticsearch。模块分为6个核心域。质量属性建议包括可测试性（单元测试覆盖≥80%）、可维护性（统一代码规范）、安全性（JWT + HTTPS + 数据脱敏）。
 
 **人工评估：** 质量3.5/5。引入了过多中间件（RabbitMQ、Elasticsearch），对MVP过度设计。但质量属性分析有价值。角色扮演让AI追求"专业完整性"而忽视了"可行性"。
 

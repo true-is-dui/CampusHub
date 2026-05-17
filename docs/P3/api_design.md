@@ -1,7 +1,7 @@
 # API 接口规范 — 校园互助服务平台
 
-**版本：** 1.0
-**日期：** 2026-05-01
+**版本：** 2.0
+**日期：** 2026-05-17
 **团队：** true就是队
 
 ---
@@ -35,6 +35,7 @@
 | 401 | 未认证 / Token过期 |
 | 404 | 资源不存在 |
 | 409 | 业务冲突（如重复接单、学号已注册） |
+| 422 | 支付失败（支付宝沙箱调用失败、余额不足等） |
 | 429 | 请求频率超限 |
 | 500 | 服务器内部错误 |
 
@@ -93,7 +94,6 @@ Response (200):
     "token": "eyJhbGciOiJIUzI1NiIs...",
     "nickname": "张三",
     "avatar": "https://cdn.campushub.cn/avatars/1001.jpg",
-    "credits": 150,
     "certificationStatus": "CERTIFIED"
   }
 }
@@ -124,8 +124,7 @@ Response (200):
   "message": "认证成功",
   "data": {
     "studentId": "2024****0001",
-    "certificationStatus": "CERTIFIED",
-    "creditsReward": 10
+    "certificationStatus": "CERTIFIED"
   }
 }
 
@@ -152,7 +151,7 @@ Content-Type: application/json
 | title | String | 是 | 标题 |
 | description | String | 否 | 描述 |
 | campus | String | 否 | 校区（问答类型可不填） |
-| credits | Integer | 否 | 报酬积分，默认0（仅ERRAND类型有效，其他类型忽略） |
+| rewardAmount | BigDecimal | 否 | 报酬金额（元），默认0（仅ERRAND类型有效，其他类型忽略。>0时需支付宝支付） |
 | expiresInHours | Integer | 否 | 有效期（小时），默认24 |
 | extra | Object | 是 | 类型特有字段，见下表 |
 
@@ -173,7 +172,7 @@ Content-Type: application/json
   "title": "帮取韵达快递",
   "description": "3号韵达快递站，小件",
   "campus": "南校区",
-  "credits": 10,
+  "rewardAmount": 5.00,
   "expiresInHours": 24,
   "extra": {
     "pickupLocation": "韵达快递站",
@@ -257,12 +256,21 @@ Response (200):
   }
 }
 
-Response (400):
+Response (200, 含支付):
 {
-  "code": 400,
-  "message": "积分不足",
-  "data": { "required": 10, "available": 5 }
+  "code": 200,
+  "message": "发布成功，需完成支付",
+  "data": {
+    "taskId": 2001,
+    "status": "PENDING_PAYMENT",
+    "paymentUrl": "https://openapi.alipay.com/gateway.do?...",
+    "outTradeNo": "CH20260501103000001",
+    "createdAt": "2026-05-01T10:30:00"
+  }
 }
+
+说明：rewardAmount > 0 时，发布后需跳转支付宝沙箱完成付款，
+付款成功后任务状态变为 PENDING（待接单）。rewardAmount = 0 时直接发布成功。
 ```
 
 ### 接口 5：浏览需求列表
@@ -282,7 +290,7 @@ Response (200):
         "title": "帮取韵达快递",
         "description": "3号韵达快递站，小件",
         "campus": "南校区",
-        "credits": 10,
+        "rewardAmount": 5.00,
         "status": "PENDING",
         "publisher": {
           "userId": 1001,
@@ -304,7 +312,7 @@ Response (200):
   type      可选  ERRAND / LOST_FOUND / MATCH / SECONDHAND / QA
   campus    可选  校区名称
   keyword   可选  搜索关键词
-  sort      可选  latest(默认) / credits_desc / expiring_soon
+  sort      可选  latest(默认) / reward_desc / expiring_soon
   page      可选  页码(默认1)
   pageSize  可选  每页数量(默认20, 最大50)
 ```
@@ -354,7 +362,7 @@ Response (200):
       "taskId": 2001,
       "type": "ERRAND",
       "title": "帮取韵达快递",
-      "credits": 10
+      "rewardAmount": 5.00
     },
     "publisher": {
       "userId": 1001,
@@ -526,8 +534,7 @@ Response (200):
   "message": "已选为最佳回答",
   "data": {
     "commentId": 8001,
-    "targetId": 6001,
-    "answererCreditsReward": 10
+    "targetId": 6001
   }
 }
 
@@ -714,6 +721,108 @@ Response (200):
 
 Response (400):
 { "code": 400, "message": "处理理由不能为空" }
+```
+
+### 接口 21：支付宝异步回调（无需认证）
+
+```
+POST /api/v1/payments/alipay/notify
+Content-Type: application/x-www-form-urlencoded
+
+参数（支付宝标准异步通知参数）:
+  out_trade_no   商户订单号
+  trade_no       支付宝交易号
+  trade_status   交易状态（TRADE_SUCCESS / TRADE_FINISHED）
+  total_amount   交易金额
+  sign           签名
+  sign_type      RSA2
+
+处理逻辑:
+1. 验证签名（防伪造）
+2. 根据 out_trade_no 找到对应订单
+3. 更新 PaymentRecord 状态为 PAID
+4. 更新 Task 状态为 PENDING（待接单）
+5. 返回 "success" 给支付宝（必须，否则会重复通知）
+
+Response: 返回纯文本 "success"
+```
+
+### 接口 22：查询支付状态
+
+```
+GET /api/v1/payments/{outTradeNo}
+Authorization: Bearer <token>
+
+Response (200):
+{
+  "code": 200,
+  "data": {
+    "outTradeNo": "CH20260501103000001",
+    "tradeNo": "2026050122001400001",
+    "amount": 5.00,
+    "status": "PAID",
+    "paidAt": "2026-05-01T10:35:00"
+  }
+}
+
+status: WAITING_PAY / PAID / TRANSFERRED / REFUNDED / FAILED
+```
+
+### 接口 23：确认完成并转账
+
+```
+POST /api/v1/orders/{orderId}/confirm
+Authorization: Bearer <token>
+
+说明: 发布方确认任务完成。若报酬>0，系统通过支付宝沙箱
+      将报酬从平台中间账户转账至接单方支付宝账户。
+
+Response (200):
+{
+  "code": 200,
+  "message": "确认完成，转账已发起",
+  "data": {
+    "orderId": 3001,
+    "status": "COMPLETED",
+    "transferStatus": "PROCESSING",
+    "amount": 5.00
+  }
+}
+
+Response (400):
+{ "code": 400, "message": "订单状态不允许确认完成" }
+
+Response (400):
+{ "code": 400, "message": "只有发布方可以确认完成" }
+```
+
+### 接口 24：退款（取消订单时）
+
+```
+POST /api/v1/payments/{outTradeNo}/refund
+Authorization: Bearer <token>
+Content-Type: application/json
+
+Request:
+{
+  "reason": "任务取消，申请退款"
+}
+
+说明: 接单前取消订单时，将已支付的报酬原路退回至发布方支付宝账户。
+
+Response (200):
+{
+  "code": 200,
+  "message": "退款已发起",
+  "data": {
+    "outTradeNo": "CH20260501103000001",
+    "refundAmount": 5.00,
+    "refundStatus": "PROCESSING"
+  }
+}
+
+Response (400):
+{ "code": 400, "message": "该订单不支持退款" }
 ```
 
 ---
