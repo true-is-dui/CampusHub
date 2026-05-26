@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="820" viewBox="0 0 1200 820" role="img" aria-label="校园互助服务平台系统级用例图">
+  <defs>
+    <style>
+      text { font-family: "PingFang SC", "Microsoft YaHei", Arial, sans-serif; fill: #1f2933; }
+      .title { font-size: 24px; font-weight: 700; }
+      .actor-label { font-size: 17px; font-weight: 600; text-anchor: middle; }
+      .usecase-text { font-size: 15px; text-anchor: middle; dominant-baseline: middle; }
+      .box { fill: #ffffff; stroke: #2f3a45; stroke-width: 2; rx: 8; }
+      .usecase { fill: #f8fafc; stroke: #334155; stroke-width: 1.6; }
+      .actor-line { stroke: #334155; stroke-width: 2; fill: none; stroke-linecap: round; }
+      .link { stroke: #64748b; stroke-width: 1.4; fill: none; }
+    </style>
+  </defs>
+
+  <rect class="box" x="210" y="45" width="770" height="725" />
+  <text class="title" x="595" y="80" text-anchor="middle">校园互助服务平台</text>
+
+  <!-- Actors -->
+  <g id="visitor" transform="translate(95 165)">
+    <circle class="actor-line" cx="0" cy="-38" r="17" />
+    <line class="actor-line" x1="0" y1="-21" x2="0" y2="32" />
+    <line class="actor-line" x1="-34" y1="0" x2="34" y2="0" />
+    <line class="actor-line" x1="0" y1="32" x2="-28" y2="76" />
+    <line class="actor-line" x1="0" y1="32" x2="28" y2="76" />
+    <text class="actor-label" x="0" y="108">访客</text>
+  </g>
+
+  <g id="student" transform="translate(95 505)">
+    <circle class="actor-line" cx="0" cy="-38" r="17" />
+    <line class="actor-line" x1="0" y1="-21" x2="0" y2="32" />
+    <line class="actor-line" x1="-34" y1="0" x2="34" y2="0" />
+    <line class="actor-line" x1="0" y1="32" x2="-28" y2="76" />
+    <line class="actor-line" x1="0" y1="32" x2="28" y2="76" />
+    <text class="actor-label" x="0" y="108">普通用户</text>
+    <text class="actor-label" x="0" y="131">（学生）</text>
+  </g>
+
+  <g id="admin" transform="translate(1105 340)">
+    <circle class="actor-line" cx="0" cy="-38" r="17" />
+    <line class="actor-line" x1="0" y1="-21" x2="0" y2="32" />
+    <line class="actor-line" x1="-34" y1="0" x2="34" y2="0" />
+    <line class="actor-line" x1="0" y1="32" x2="-28" y2="76" />
+    <line class="actor-line" x1="0" y1="32" x2="28" y2="76" />
+    <text class="actor-label" x="0" y="108">管理员</text>
+  </g>
+
+  <!-- Use cases -->
+  <g id="uc01"><ellipse class="usecase" cx="395" cy="130" rx="150" ry="28" /><text class="usecase-text" x="395" y="130">UC-01 用户注册与登录</text></g>
+  <g id="uc02"><ellipse class="usecase" cx="395" cy="190" rx="150" ry="28" /><text class="usecase-text" x="395" y="190">UC-02 查看个人主页</text></g>
+  <g id="uc03"><ellipse class="usecase" cx="395" cy="250" rx="150" ry="28" /><text class="usecase-text" x="395" y="250">UC-03 发布跑腿任务</text></g>
+  <g id="uc04"><ellipse class="usecase" cx="395" cy="310" rx="150" ry="28" /><text class="usecase-text" x="395" y="310">UC-04 接单并完成跑腿任务</text></g>
+  <g id="uc05"><ellipse class="usecase" cx="395" cy="370" rx="150" ry="28" /><text class="usecase-text" x="395" y="370">UC-05 发布失物招领</text></g>
+  <g id="uc06"><ellipse class="usecase" cx="395" cy="430" rx="150" ry="28" /><text class="usecase-text" x="395" y="430">UC-06 浏览需求大厅</text></g>
+  <g id="uc07"><ellipse class="usecase" cx="395" cy="490" rx="150" ry="28" /><text class="usecase-text" x="395" y="490">UC-07 发布搭子招募</text></g>
+  <g id="uc08"><ellipse class="usecase" cx="395" cy="550" rx="150" ry="28" /><text class="usecase-text" x="395" y="550">UC-08 报名搭子活动</text></g>
+
+  <g id="uc09"><ellipse class="usecase" cx="790" cy="130" rx="150" ry="28" /><text class="usecase-text" x="790" y="130">UC-09 发布二手商品</text></g>
+  <g id="uc10"><ellipse class="usecase" cx="790" cy="190" rx="150" ry="28" /><text class="usecase-text" x="790" y="190">UC-10 发布问题咨询</text></g>
+  <g id="uc11"><ellipse class="usecase" cx="790" cy="250" rx="150" ry="28" /><text class="usecase-text" x="790" y="250">UC-11 回答问题</text></g>
+  <g id="uc12"><ellipse class="usecase" cx="790" cy="310" rx="150" ry="28" /><text class="usecase-text" x="790" y="310">UC-12 浏览咨询问答</text></g>
+  <g id="uc13"><ellipse class="usecase" cx="790" cy="370" rx="150" ry="28" /><text class="usecase-text" x="790" y="370">UC-13 后台审核与管理</text></g>
+  <g id="uc14"><ellipse class="usecase" cx="790" cy="430" rx="150" ry="28" /><text class="usecase-text" x="790" y="430">UC-14 互评</text></g>
+  <g id="uc15"><ellipse class="usecase" cx="790" cy="490" rx="150" ry="28" /><text class="usecase-text" x="790" y="490">UC-15 申诉处理</text></g>
+  <g id="uc16"><ellipse class="usecase" cx="790" cy="550" rx="150" ry="28" /><text class="usecase-text" x="790" y="550">UC-16 即时通讯</text></g>
+
+  <!-- Visitor associations -->
+  <line class="link" x1="123" y1="178" x2="250" y2="430" />
+  <line class="link" x1="123" y1="178" x2="640" y2="310" />
+
+  <!-- Student associations -->
+  <line class="link" x1="129" y1="470" x2="250" y2="130" />
+  <line class="link" x1="129" y1="470" x2="250" y2="190" />
+  <line class="link" x1="129" y1="470" x2="250" y2="250" />
+  <line class="link" x1="129" y1="470" x2="250" y2="310" />
+  <line class="link" x1="129" y1="470" x2="250" y2="370" />
+  <line class="link" x1="129" y1="470" x2="250" y2="430" />
+  <line class="link" x1="129" y1="470" x2="250" y2="490" />
+  <line class="link" x1="129" y1="470" x2="250" y2="550" />
+
+  <line class="link" x1="129" y1="470" x2="640" y2="130" />
+  <line class="link" x1="129" y1="470" x2="640" y2="190" />
+  <line class="link" x1="129" y1="470" x2="640" y2="250" />
+  <line class="link" x1="129" y1="470" x2="640" y2="310" />
+  <line class="link" x1="129" y1="470" x2="640" y2="430" />
+  <line class="link" x1="129" y1="470" x2="640" y2="490" />
+  <line class="link" x1="129" y1="470" x2="640" y2="550" />
+
+  <!-- Admin associations -->
+  <line class="link" x1="1071" y1="340" x2="940" y2="370" />
+  <line class="link" x1="1071" y1="340" x2="940" y2="490" />
+</svg>
