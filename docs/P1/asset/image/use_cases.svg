@@ -18,16 +18,16 @@
   <!-- Use cases -->
   <g id="uc01"><ellipse class="usecase" cx="450" cy="130" rx="160" ry="28" /><text class="usecase-text" x="450" y="130">UC-01 用户注册与登录</text></g>
   <g id="uc02"><ellipse class="usecase" cx="450" cy="190" rx="160" ry="28" /><text class="usecase-text" x="450" y="190">UC-02 查看个人主页</text></g>
-  <g id="uc03"><ellipse class="usecase" cx="450" cy="250" rx="160" ry="28" /><text class="usecase-text" x="450" y="250">UC-03 发布跑腿任务</text></g>
-  <g id="uc04"><ellipse class="usecase" cx="450" cy="310" rx="160" ry="28" /><text class="usecase-text" x="450" y="310">UC-04 接单并完成跑腿任务</text></g>
+  <g id="uc03"><ellipse class="usecase" cx="450" cy="250" rx="160" ry="28" /><text class="usecase-text" x="450" y="250">UC-03 发布代取服务</text></g>
+  <g id="uc04"><ellipse class="usecase" cx="450" cy="310" rx="160" ry="28" /><text class="usecase-text" x="450" y="310">UC-04 接单并完成代取</text></g>
   <g id="uc05"><ellipse class="usecase" cx="450" cy="370" rx="160" ry="28" /><text class="usecase-text" x="450" y="370">UC-05 发布失物招领</text></g>
   <g id="uc06"><ellipse class="usecase" cx="450" cy="430" rx="160" ry="28" /><text class="usecase-text" x="450" y="430">UC-06 浏览需求大厅</text></g>
-  <g id="uc07"><ellipse class="usecase" cx="450" cy="490" rx="160" ry="28" /><text class="usecase-text" x="450" y="490">UC-07 发布搭子招募</text></g>
-  <g id="uc08"><ellipse class="usecase" cx="450" cy="550" rx="160" ry="28" /><text class="usecase-text" x="450" y="550">UC-08 报名搭子活动</text></g>
-  <g id="uc09"><ellipse class="usecase" cx="450" cy="610" rx="160" ry="28" /><text class="usecase-text" x="450" y="610">UC-09 发布二手商品</text></g>
-  <g id="uc10"><ellipse class="usecase" cx="450" cy="670" rx="160" ry="28" /><text class="usecase-text" x="450" y="670">UC-10 发布问题咨询</text></g>
-  <g id="uc11"><ellipse class="usecase" cx="450" cy="730" rx="160" ry="28" /><text class="usecase-text" x="450" y="730">UC-11 回答问题</text></g>
-  <g id="uc12"><ellipse class="usecase" cx="450" cy="790" rx="160" ry="28" /><text class="usecase-text" x="450" y="790">UC-12 浏览咨询问答</text></g>
+  <g id="uc07"><ellipse class="usecase" cx="450" cy="490" rx="160" ry="28" /><text class="usecase-text" x="450" y="490">UC-07 发布二手商品</text></g>
+  <g id="uc08"><ellipse class="usecase" cx="450" cy="550" rx="160" ry="28" /><text class="usecase-text" x="450" y="550">UC-08 私聊联系发布者</text></g>
+  <g id="uc09"><ellipse class="usecase" cx="450" cy="610" rx="160" ry="28" /><text class="usecase-text" x="450" y="610">UC-09 标记互助结束</text></g>
+  <g id="uc10"><ellipse class="usecase" cx="450" cy="670" rx="160" ry="28" /><text class="usecase-text" x="450" y="670">UC-10 提交实名认证</text></g>
+  <g id="uc11"><ellipse class="usecase" cx="450" cy="730" rx="160" ry="28" /><text class="usecase-text" x="450" y="730">UC-11 管理员审核认证</text></g>
+  <g id="uc12"><ellipse class="usecase" cx="450" cy="790" rx="160" ry="28" /><text class="usecase-text" x="450" y="790">UC-12 查看交易记录</text></g>
   <g id="uc13"><ellipse class="usecase" cx="450" cy="850" rx="160" ry="28" /><text class="usecase-text" x="450" y="850">UC-13 后台审核与管理</text></g>
   <g id="uc14"><ellipse class="usecase" cx="450" cy="910" rx="160" ry="28" /><text class="usecase-text" x="450" y="910">UC-14 互评</text></g>
   <g id="uc15"><ellipse class="usecase" cx="450" cy="970" rx="160" ry="28" /><text class="usecase-text" x="450" y="970">UC-15 申诉处理</text></g>
@@ -35,7 +35,6 @@
 
   <!-- Visitor associations -->
   <line class="link" x1="172" y1="250" x2="290" y2="430" />
-  <line class="link" x1="172" y1="250" x2="290" y2="790" />
 
   <!-- Student associations -->
   <line class="link" x1="172" y1="720" x2="290" y2="130" />
@@ -48,13 +47,13 @@
   <line class="link" x1="172" y1="720" x2="290" y2="550" />
   <line class="link" x1="172" y1="720" x2="290" y2="610" />
   <line class="link" x1="172" y1="720" x2="290" y2="670" />
-  <line class="link" x1="172" y1="720" x2="290" y2="730" />
   <line class="link" x1="172" y1="720" x2="290" y2="790" />
   <line class="link" x1="172" y1="720" x2="290" y2="910" />
   <line class="link" x1="172" y1="720" x2="290" y2="970" />
   <line class="link" x1="172" y1="720" x2="290" y2="1030" />
 
   <!-- Admin associations -->
+  <line class="link" x1="728" y1="850" x2="610" y2="730" />
   <line class="link" x1="728" y1="850" x2="610" y2="850" />
   <line class="link" x1="728" y1="850" x2="610" y2="970" />
 
