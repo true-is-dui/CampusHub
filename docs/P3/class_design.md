@@ -32,7 +32,7 @@ classDiagram
 
     PickupRequest "0..1" --> "1" PaymentRecord : paymentId
     PickupRequest ..> StoredFile : 通过fileId引用凭证文件
-    PickupRequest "1" --> "0..2" Evaluation : evaluationIds
+    Evaluation ..> PickupRequest : businessType=PICKUP,businessId
     User "1" --> "*" Evaluation : 发出/收到
     User "1" --> "*" NotificationRecord : 接收
 
@@ -78,13 +78,11 @@ classDiagram
         +Long paymentId
         +PickupStatus status
         +LocalDateTime acceptDeadline
-        +List~Long~ completionProofFileIds
-        +List~Long~ evaluationIds
+        +Long completionProofFileId
         +markWaitingPayment(paymentId)
         +markWaitingAccept()
         +markAccepted(acceptorId)
-        +recordCompletionProof(fileIds)
-        +recordEvaluation(evaluationId)
+        +recordCompletionProof(fileId)
         +markCompleted()
         +markCancelled(reason)
         +canViewPickupCredential(userId)
@@ -98,6 +96,8 @@ classDiagram
         +Long payerId
         +Long receiverId
         +BigDecimal amount
+        +BusinessType businessType
+        +String businessTraceNo
         +String outTradeNo
         +String tradeNo
         +PaymentStatus status
@@ -111,6 +111,8 @@ classDiagram
 
     class StoredFile {
         +Long fileId
+        +Long uploaderId
+        +FileUsage fileUsage
         +String storagePath
         +String mimeType
         +Long size
@@ -121,6 +123,9 @@ classDiagram
         +Long id
         +Long reviewerId
         +Long revieweeId
+        +BusinessType businessType
+        +Long businessId
+        +PickupParticipantRole revieweeRoleInBusiness
         +RatingLevel ratingLevel
         +String content
         +LocalDateTime createdAt
@@ -157,7 +162,7 @@ classDiagram
     PickupService --> PaymentService : 预付款/退款/结算
     PickupService --> FileStorageService : 取件凭证/完成凭证
     PickupService --> NotificationService : 接单/凭证/完成通知
-    FileStorageService --> StoredFile : 维护本地文件元数据
+    FileStorageService --> StoredFile : 维护文件元数据和上传溯源
 
     PaymentService --> PaymentRecord
     PaymentService --> PaymentGateway : 依赖支付网关接口
@@ -201,18 +206,17 @@ classDiagram
         +queryHall(campus, rewardType, pageQuery)
         +queryDetail(pickupId, currentUserId)
         +acceptPickup(pickupId, acceptorId)
-        +uploadCompletionProof(pickupId, acceptorId, fileIds)
+        +uploadCompletionProof(pickupId, acceptorId, fileId)
         +confirmComplete(pickupId, publisherId)
         +cancelPickup(pickupId, publisherId, reason)
         +expireOpenPickups(now)
         +queryMyPublished(userId, status, pageQuery)
         +queryMyAccepted(userId, status, pageQuery)
         +queryPickupEvaluationContext(pickupId)
-        +recordPickupEvaluation(pickupId, evaluationId)
     }
 
     class PaymentService {
-        +createPrepay(payerId, amount, expireAt)
+        +createPrepay(payerId, amount, expireAt, businessType, businessTraceNo)
         +handlePaymentSuccess(paymentId, tradeNo)
         +cancelWaitingPayment(paymentId)
         +expireWaitingPayments(now)
@@ -232,7 +236,7 @@ classDiagram
     }
 
     class FileStorageService {
-        +uploadImage(file)
+        +uploadImage(file, uploaderId, fileUsage)
         +loadFile(fileId)
         +validateImage(file)
     }
@@ -241,7 +245,7 @@ classDiagram
         +queryEvaluationEligibility(pickupId, reviewerId)
         +submitEvaluation(pickupId, reviewerId, revieweeId, ratingLevel, content)
         +queryUserRatingSummary(userId)
-        +queryUserEvaluations(userId, reviewerRole, pageQuery)
+        +queryUserEvaluations(userId, revieweeRoleInBusiness, pageQuery)
         +queryEvaluationDetail(evaluationId)
     }
 
@@ -347,8 +351,7 @@ classDiagram
 | status | PickupStatus(Enum) | 待支付/待接单/进行中/已完成/已取消 |
 | acceptDeadline | LocalDateTime | 接单截止时间 |
 | acceptedAt | LocalDateTime | 接单时间 |
-| completionProofFileIds | List<Long> | 完成凭证图片文件标识，接单方上传 |
-| evaluationIds | List<Long> | 该代取服务关联的评价记录 ID，最多两条 |
+| completionProofFileId | Long | 完成凭证图片文件标识，接单方上传；MVP 阶段限定为一张图片 |
 | completedAt | LocalDateTime | 完成时间 |
 | cancelReason | String | 取消原因 |
 | createdAt | LocalDateTime | 发布时间 |
@@ -358,14 +361,32 @@ classDiagram
 | markWaitingPayment(paymentId) | 有报酬服务发布后进入待支付；支付过期时间由支付记录维护 |
 | markWaitingAccept() | 无报酬服务发布成功或有报酬服务支付成功后进入待接单 |
 | markAccepted(acceptorId) | 记录接单方并进入进行中 |
-| recordCompletionProof(fileIds) | 保存完成凭证图片标识 |
-| recordEvaluation(evaluationId) | 记录该代取服务关联的一条评价 ID |
+| recordCompletionProof(fileId) | 保存单张完成凭证图片标识 |
 | markCompleted() | 发布方确认完成后进入已完成 |
 | markCancelled(reason) | 服务取消或超时后进入已取消 |
 | canViewPickupCredential(userId) | 仅接单方在接单成功后可查看取件凭证 |
 | isHallVisible() | 仅待接单状态可进入代取需求大厅 |
 | isPublisher(userId) | 判断用户是否为该代取服务发布方；供服务层内部校验使用 |
 | isAcceptor(userId) | 判断用户是否为该代取服务接单方；供服务层内部校验使用 |
+
+> 代取服务不保存评价 ID 列表。评价通过 `Evaluation.businessType + Evaluation.businessId` 查询，当前 MVP 中 `businessType` 固定为 `PICKUP`，`businessId` 对应代取服务 ID。MVP 阶段完成凭证限定为一张图片；后续若需要多张完成凭证，可扩展为完成凭证关联表，但本阶段不建模。
+
+#### PickupSummary（代取服务摘要）
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| pickupId | Long | 代取服务 ID |
+| campus | String | 服务所在校区 |
+| pickupLocation | String | 取件地点 |
+| deliveryLocation | String | 送达地点 |
+| itemDescriptionPreview | String | 物品描述预览 |
+| rewardType | RewardType(Enum) | 有报酬/无报酬 |
+| rewardAmount | BigDecimal | 报酬金额；无报酬服务为空 |
+| status | PickupStatus(Enum) | 当前代取服务状态 |
+| createdAt | LocalDateTime | 发布时间 |
+| completedAt | LocalDateTime | 服务完成时间；未完成服务为空 |
+
+> `PickupSummary` 是代取服务的通用展示摘要，主要用于“我的发布”“我的接单”记录总览，也可被评价详情复用为关联服务背景。它不暴露取件凭证、完成凭证、支付记录和参与者隐私字段。
 
 #### PaymentRecord（支付记录）
 
@@ -375,6 +396,8 @@ classDiagram
 | payerId | Long | 付款方，即代取发布方 |
 | receiverId | Long | 收款方，即接单方；结算前可为空 |
 | amount | BigDecimal | 支付金额 |
+| businessType | BusinessType(Enum) | 业务类型，当前 MVP 可为 `PICKUP` |
+| businessTraceNo | String | 业务追踪号，由代取服务模块生成并传入 |
 | outTradeNo | String | 平台生成的商户订单号 |
 | tradeNo | String | 支付宝沙箱交易号 |
 | status | PaymentStatus(Enum) | 内部设计状态：待支付/已支付/已关闭/已退款/已结算 |
@@ -390,19 +413,21 @@ classDiagram
 | markRefunded() | 服务取消且已预付款时标记退款 |
 | markSettled(receiverId) | 发布方确认完成后标记结算 |
 
-> `PaymentStatus` 不是 P1 直接规定的业务状态，而是 P3 根据 P1/P2 中“预付款、关闭未支付、退款、结算”这些支付动作派生出的内部实现状态。支付接口调用失败、回调验签失败或第三方异常不作为支付记录的稳定业务状态保存，按错误码和关键操作日志处理。P1 明确规定的代取业务状态仍以 `PickupStatus` 为准。支付模块不保存 `pickupRequestId`，业务对象与支付记录的关联由 `PickupRequest.paymentId` 维护，避免支付模块反向依赖具体业务类型。待支付过期时间只保存在支付记录 `expireAt` 中，代取服务不重复保存；退款和结算时间如需展示，可使用 `statusChangedAt` 或关键操作日志追溯。
+> `PaymentStatus` 不是 P1 直接规定的业务状态，而是 P3 根据 P1/P2 中“预付款、关闭未支付、退款、结算”这些支付动作派生出的内部实现状态。支付接口调用失败、回调验签失败或第三方异常不作为支付记录的稳定业务状态保存，按错误码和关键操作日志处理。P1 明确规定的代取业务状态仍以 `PickupStatus` 为准。支付模块不保存具体代取服务 ID 字段，业务对象与支付记录的关联由 `PickupRequest.paymentId` 维护。`businessType` 和 `businessTraceNo` 仅用于幂等校验、日志追踪、异常排查和支付宝沙箱回调匹配；支付模块不根据这些字段理解或修改具体业务状态，代取服务状态仍由 `PickupService` / `PickupRequest` 维护。待支付过期时间只保存在支付记录 `expireAt` 中，代取服务不重复保存；退款和结算时间如需展示，可使用 `statusChangedAt` 或关键操作日志追溯。
 
 #### StoredFile（文件资源）
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
 | fileId | Long | 文件标识 |
+| uploaderId | Long | 上传者用户 ID，仅用于上传记录追踪、审计排查和孤立文件清理 |
+| fileUsage | FileUsage(Enum) | 文件用途标记，可取 `AVATAR`、`VERIFICATION_MATERIAL`、`PICKUP_CREDENTIAL`、`COMPLETION_PROOF` |
 | storagePath | String | 服务器本地存储路径 |
 | mimeType | String | 文件类型 |
 | size | Long | 文件大小 |
 | createdAt | LocalDateTime | 上传时间 |
 
-> `StoredFile` 是文件元数据记录，不承担业务方法。文件模块的方法由 `FileStorageService` 提供。文件模块只负责本地存储元数据、格式大小校验和文件内容读取，不保存上传者、业务用途或业务归属。头像、认证材料、取件凭证和完成凭证等归属关系由对应业务对象保存文件标识来表达。业务模块必须先鉴权，再调用 `FileStorageService.loadFile(fileId)`。
+> `StoredFile` 保存文件元数据和上传溯源信息。`uploaderId` 与 `fileUsage` 仅用于上传记录追踪、审计排查和孤立文件清理，不表示最终业务归属。头像、认证材料、取件凭证和完成凭证等业务归属仍由对应业务对象通过 `fileId` 引用表达。业务模块必须先完成权限和状态校验，再调用 `FileStorageService.loadFile(fileId)` 读取文件。
 
 #### Evaluation（评价，Should）
 
@@ -411,37 +436,40 @@ classDiagram
 | id | Long | 评价主键 |
 | reviewerId | Long | 评价者 ID |
 | revieweeId | Long | 被评价者 ID |
+| businessType | BusinessType(Enum) | 评价所属业务类型，当前 MVP 固定为 `PICKUP` |
+| businessId | Long | 业务对象 ID，当前 MVP 对应代取服务 ID |
+| revieweeRoleInBusiness | PickupParticipantRole(Enum) | 被评价者在该业务中的角色，当前 MVP 可取 `PUBLISHER` / `ACCEPTOR` |
 | ratingLevel | RatingLevel(Enum) | 好评/中评/差评 |
 | content | String | 评价内容；差评必填 |
 | createdAt | LocalDateTime | 创建时间 |
 
-> 评价记录只保存评价双方、评价等级和内容，不直接保存被评价服务 ID。代取服务通过 `PickupRequest.evaluationIds` 维护与评价记录的关联。
+> 评价记录保存通用业务关联字段，避免后续扩展业务时在评价表中写死 `pickupId`。当前 MVP 可通过 `businessType + businessId + reviewerId` 唯一约束避免同一个业务对象中同一评价者重复评价。
 
 #### RatingSummary（评价统计摘要，Should）
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
 | userId | Long | 被统计用户 ID |
-| publisherReviewerSummary | RatingRoleSummary | 来自发布方的评价统计 |
-| acceptorReviewerSummary | RatingRoleSummary | 来自接单方的评价统计 |
+| publisherRoleSummary | RatingRoleSummary | 用户作为发布方时收到的评价统计 |
+| acceptorRoleSummary | RatingRoleSummary | 用户作为接单方时收到的评价统计 |
 
-#### RatingRoleSummary（按评价者角色统计，Should）
+#### RatingRoleSummary（按被评价者业务角色统计，Should）
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
-| reviewerRole | PickupParticipantRole(Enum) | 评价者在代取服务中的角色：发布方/接单方 |
-| positiveCount | Integer | 该角色给出的好评数量 |
-| neutralCount | Integer | 该角色给出的中评数量 |
-| negativeCount | Integer | 该角色给出的差评数量 |
-| totalCount | Integer | 该角色给出的评价总数 |
-| positiveRate | BigDecimal | 该角色评价的好评率，计算公式为好评数 / 评价总数 |
+| revieweeRoleInBusiness | PickupParticipantRole(Enum) | 被评价者在业务中的角色，当前 MVP 可取 `PUBLISHER` / `ACCEPTOR` |
+| positiveCount | Integer | 用户以该业务角色收到的好评数量 |
+| neutralCount | Integer | 用户以该业务角色收到的中评数量 |
+| negativeCount | Integer | 用户以该业务角色收到的差评数量 |
+| totalCount | Integer | 用户以该业务角色收到的评价总数 |
+| positiveRate | BigDecimal | 用户以该业务角色收到评价的好评率，计算公式为好评数 / 评价总数 |
 
 #### EvaluationHistorySummary（历史评价总览项，Should）
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
 | evaluationId | Long | 评价 ID |
-| reviewerRoleInPickup | PickupParticipantRole(Enum) | 评价者在该代取服务中的角色：发布方/接单方 |
+| revieweeRoleInBusiness | PickupParticipantRole(Enum) | 被评价者在该业务中的角色，当前 MVP 可取 `PUBLISHER` / `ACCEPTOR` |
 | ratingLevel | RatingLevel(Enum) | 好评/中评/差评 |
 | contentPreview | String | 评价内容预览 |
 | createdAt | LocalDateTime | 评价时间 |
@@ -452,8 +480,8 @@ classDiagram
 |------|------|------|
 | evaluationId | Long | 评价 ID |
 | reviewerNickname | String | 评价者昵称 |
-| reviewerRoleInPickup | PickupParticipantRole(Enum) | 评价者在该代取服务中的角色：发布方/接单方 |
-| pickupSummary | String | 关联代取服务摘要，例如取件地点到送达地点 |
+| revieweeRoleInBusiness | PickupParticipantRole(Enum) | 被评价者在该业务中的角色，当前 MVP 可取 `PUBLISHER` / `ACCEPTOR` |
+| pickupSummary | PickupSummary | 关联代取服务摘要 |
 | ratingLevel | RatingLevel(Enum) | 好评/中评/差评 |
 | content | String | 完整评价内容 |
 | createdAt | LocalDateTime | 评价时间 |
@@ -519,14 +547,15 @@ classDiagram
 | queryHall(campus, rewardType, pageQuery) | 查询代取需求大厅，只返回待接单服务，支持校区和报酬类型筛选，按发布时间倒序 |
 | queryDetail(pickupId, currentUserId) | 查询详情；接单前不返回取件凭证 |
 | acceptPickup(pickupId, acceptorId) | 认证用户接单；接单方不得是发布方；成功后进入进行中 |
-| uploadCompletionProof(pickupId, acceptorId, fileIds) | 接单方上传完成凭证 |
+| uploadCompletionProof(pickupId, acceptorId, fileId) | 接单方上传单张完成凭证；MVP 阶段完成凭证限定为一张图片 |
 | confirmComplete(pickupId, publisherId) | 发布方确认完成；有报酬服务触发结算，无报酬服务不处理资金 |
 | cancelPickup(pickupId, publisherId, reason) | 发布方取消待支付或待接单服务；已预付款时触发退款 |
 | expireOpenPickups(now) | 扫描超过接单截止时间仍无人接单的服务并取消 |
-| queryMyPublished(userId, status, pageQuery) | 查询我的发布，支持按状态分类 |
-| queryMyAccepted(userId, status, pageQuery) | 查询我的接单，支持按状态分类 |
+| queryMyPublished(userId, status, pageQuery) | 查询我的发布，支持总览和按状态分类，返回 `PickupSummary` 列表 |
+| queryMyAccepted(userId, status, pageQuery) | 查询我的接单，支持总览和按状态分类，返回 `PickupSummary` 列表 |
 | queryPickupEvaluationContext(pickupId) | 向评价模块提供发布方、接单方和服务状态 |
-| recordPickupEvaluation(pickupId, evaluationId) | 评价提交成功后，记录代取服务关联的评价 ID |
+
+> 代取服务不保存评价 ID 列表。评价查询、评价统计、评价详情展示和重复评价校验均通过 `Evaluation.businessType + Evaluation.businessId` 定位业务对象；当前 MVP 中 `businessType=PICKUP`，`businessId` 为代取服务 ID。
 
 #### PaymentService（支付服务）
 
@@ -534,7 +563,7 @@ classDiagram
 
 | 方法 | 说明 |
 |------|------|
-| createPrepay(payerId, amount, expireAt) | 创建支付宝沙箱预付款入口，返回 `paymentId`、支付入口和过期时间 |
+| createPrepay(payerId, amount, expireAt, businessType, businessTraceNo) | 创建支付宝沙箱预付款入口，接收通用业务追踪信息，返回 `paymentId`、支付入口和过期时间 |
 | handlePaymentSuccess(paymentId, tradeNo) | 处理支付宝沙箱支付成功通知，标记支付记录已支付 |
 | cancelWaitingPayment(paymentId) | 关闭尚未支付的支付记录 |
 | expireWaitingPayments(now) | 关闭超时仍未支付的支付记录，关闭原因记录为支付超时 |
@@ -543,23 +572,29 @@ classDiagram
 | settlePayment(paymentId, receiverId) | 发布方确认完成后向接单方结算 |
 | queryTransactions(userId, pageQuery) | 查询用户支付、退款和结算记录 |
 
+> `businessType` 和 `businessTraceNo` 只服务于幂等校验、日志追踪、异常排查和支付宝沙箱回调匹配。支付模块不新增具体代取服务 ID 字段，也不根据通用追踪字段修改代取服务状态。
+
 #### FileStorageService（文件存储服务）
 
 | 方法 | 说明 |
 |------|------|
-| uploadImage(file) | 校验 JPG/PNG 和大小限制，保存本地文件并返回文件标识 |
+| uploadImage(file, uploaderId, fileUsage) | 校验 JPG/PNG 和大小限制，保存本地文件，记录上传者和文件用途溯源信息，并返回文件标识 |
 | loadFile(fileId) | 根据文件标识读取文件内容和 MIME 类型 |
 | validateImage(file) | 校验图片格式和大小 |
+
+> 图片上传处理流程可由第 3.1 节的模板方法结构实现。业务模块必须先完成权限和状态校验，再选择头像、认证材料、取件凭证或完成凭证对应的上传处理器；文件模块保存上传溯源信息，但不判断用户是否有权查看或使用某个业务文件。
 
 #### EvaluationService（评价服务，Should）
 
 | 方法 | 说明 |
 |------|------|
 | queryEvaluationEligibility(pickupId, reviewerId) | 查询当前用户对某代取服务是否可评价 |
-| submitEvaluation(pickupId, reviewerId, revieweeId, ratingLevel, content) | 提交评价；后端重新校验服务已完成、双方属于该服务且未重复评价；创建评价后调用代取服务记录评价 ID |
-| queryUserRatingSummary(userId) | 分别计算来自发布方和来自接单方的好评率、好评数、中评数、差评数和评价总数 |
-| queryUserEvaluations(userId, reviewerRole, pageQuery) | 分页查询用户收到的历史评价总览，可按评价者是发布方或接单方筛选展示，返回 `EvaluationHistorySummary` 列表 |
-| queryEvaluationDetail(evaluationId) | 查询单条评价详情，返回 `EvaluationDetail` |
+| submitEvaluation(pickupId, reviewerId, revieweeId, ratingLevel, content) | 提交评价；后端重新校验服务已完成、评价者和被评价者均属于该服务，根据被评价者在该代取服务中的身份写入 `revieweeRoleInBusiness`，并校验同一个业务对象中同一评价者不可重复评价；创建评价后可生成收到评价通知 |
+| queryUserRatingSummary(userId) | 按被评价用户在代取服务中的角色，分别统计其作为发布方和作为接单方收到评价的好评率、好评数、中评数、差评数和评价总数 |
+| queryUserEvaluations(userId, revieweeRoleInBusiness, pageQuery) | 分页查询用户收到的历史评价总览，可按被评价者在业务中的角色筛选展示，返回 `EvaluationHistorySummary` 列表 |
+| queryEvaluationDetail(evaluationId) | 查询单条评价详情，返回内嵌 `PickupSummary` 的 `EvaluationDetail` |
+
+> 当前 MVP 可通过 `businessType + businessId + reviewerId` 唯一约束避免重复评价，不再要求代取服务记录评价 ID。
 
 #### NotificationService（站内通知服务，Should）
 
@@ -600,7 +635,7 @@ classDiagram
 | L - 里氏替换 | 子类能否自然替换父类？ | 是 | AI 初稿让不同业务继承同一个 `Task`，但许多字段只对某个子类有效，产生大量空字段和非法行为 | 不再强行抽象跨业务父类。`PickupRequest` 独立表达代取履约闭环 |
 | I - 接口隔离 | 是否存在过胖服务接口？ | 是 | AI 初稿设计 `IPlatformService` 或 `ITaskService`，同时包含注册、发布、接单、评价、聊天、举报等方法 | 按模块拆为 `AuthService`、`UserService`、`PickupService`、`PaymentService`、`FileStorageService`、`EvaluationService`、`NotificationService` |
 | D - 依赖倒转 | 业务服务是否直接依赖第三方或底层实现？ | 是 | AI 初稿让代取服务直接调用支付宝 SDK 和本地文件路径，业务流程依赖低层细节 | `PaymentService` 依赖 `PaymentGateway` 抽象，由 `AlipaySandboxPaymentGateway` 适配；文件读取通过 `FileStorageService` 接口 |
-| D - 依赖倒转 | 高层模块是否直接理解低层数据表结构？ | 是 | AI 初稿在支付记录中保存具体 `taskId/orderId` 并让支付模块理解业务对象 | 支付模块只维护支付记录，`PickupRequest.paymentId` 维护业务到支付的关联 |
+| D - 依赖倒转 | 高层模块是否直接理解低层数据表结构？ | 是 | AI 初稿在支付记录中保存具体 `taskId/orderId` 并让支付模块理解业务对象 | 支付模块只维护支付记录和通用追踪字段，`PickupRequest.paymentId` 维护业务到支付的关联 |
 
 ### 2.3 修正统计
 
@@ -633,37 +668,62 @@ class Task {
 
 ## 三、设计模式应用
 
-### 3.1 策略模式 — 大厅列表筛选规则
+### 3.1 模板方法模式 — 图片上传处理流程
 
-**应用场景：** 代取需求大厅当前支持校区筛选、报酬类型筛选和发布时间倒序。后续如果增加关键词搜索，或失物招领、二手交易重新进入范围，不同大厅的筛选条件会不同。可以把“如何把查询条件转换为列表过滤规则”抽成策略，避免在列表查询方法中堆大量条件分支。
+**应用场景：** MVP 中存在多个图片上传场景，包括头像、实名认证材料、取件凭证和完成凭证。它们都需要执行类似流程：校验格式、校验大小、生成存储路径、保存本地文件、写入文件元数据、返回 `fileId`；不同图片类别在大小限制、保存目录、文件类别标记等方面可能不同。
 
 ```mermaid
 classDiagram
-    HallFilterStrategy <|.. PickupHallFilterStrategy
-    HallFilterStrategy <|.. LostFoundHallFilterStrategy
-    HallFilterStrategy <|.. SecondhandHallFilterStrategy
-    PickupService --> HallFilterStrategy : 使用代取大厅筛选策略
+    AbstractImageUploadProcessor <|-- AvatarUploadProcessor
+    AbstractImageUploadProcessor <|-- VerificationMaterialUploadProcessor
+    AbstractImageUploadProcessor <|-- PickupCredentialUploadProcessor
+    AbstractImageUploadProcessor <|-- CompletionProofUploadProcessor
 
-    class HallFilterStrategy {
-        +supports(hallType)
-        +buildQuery(filter)
+    class AbstractImageUploadProcessor {
+        +upload(file, uploaderId, fileUsage)
+        #validateFormat(file)
+        #validateSize(file)
+        #generateStoragePath(file)
+        #saveToLocal(file, path)
+        #saveMetadata(file, path, uploaderId, fileUsage)
     }
 
-    class PickupHallFilterStrategy {
-        +supports(hallType)
-        +buildQuery(filter)
+    class AvatarUploadProcessor {
+        #validateSize(file)
+        #generateStoragePath(file)
+        #saveMetadata(file, path, uploaderId, fileUsage)
+    }
+
+    class VerificationMaterialUploadProcessor {
+        #validateSize(file)
+        #generateStoragePath(file)
+        #saveMetadata(file, path, uploaderId, fileUsage)
+    }
+
+    class PickupCredentialUploadProcessor {
+        #validateSize(file)
+        #generateStoragePath(file)
+        #saveMetadata(file, path, uploaderId, fileUsage)
+    }
+
+    class CompletionProofUploadProcessor {
+        #validateSize(file)
+        #generateStoragePath(file)
+        #saveMetadata(file, path, uploaderId, fileUsage)
     }
 ```
 
 **为什么用：**
 
-1. 当前只需要 `PickupHallFilterStrategy`，负责待接单代取服务的校区、报酬类型和发布时间倒序规则。
-2. 后续增加关键词搜索时，可以扩展代取筛选策略，不影响发布、接单和支付流程。
-3. 后续如果新增失物招领或二手交易大厅，可以新增对应策略，而不是在同一个列表查询方法里写业务类型分支。
+1. `upload(file, uploaderId, fileUsage)` 作为模板方法，定义固定上传流程：格式校验、大小校验、路径生成、本地保存、元数据记录和返回文件标识。
+2. 子类只处理文件类别、大小限制、存储路径规则等差异，避免把头像、认证材料、取件凭证和完成凭证的差异写成重复流程。
+3. `saveMetadata(file, path, uploaderId, fileUsage)` 写入文件元数据时也会记录 `uploaderId` 和 `fileUsage`，用于上传记录追踪、审计排查和孤立文件清理。
+4. 业务权限不放在上传处理器里判断。用户模块、实名认证审核模块、代取服务模块必须先完成业务权限和状态校验，再调用图片上传流程。
+5. 文件模块仍只负责格式大小校验、本地保存、元数据记录、上传溯源记录和文件读取，不负责判断用户是否有权查看或使用某个业务文件。
 
 **不用会怎样：**
 
-大厅列表查询会逐渐堆积 `if hallType == ...`、`if rewardType == ...`、`if keyword != null` 等分支，后续新增大厅类型时容易影响已有代取列表逻辑。
+图片上传流程会散落在用户、实名认证审核和代取服务代码中。不同场景容易出现校验规则不一致、路径规则重复、元数据写入遗漏等问题，也会诱导文件模块承担业务权限判断，破坏模块边界。
 
 ### 3.2 适配器模式 — 支付宝沙箱支付适配
 
@@ -708,10 +768,10 @@ classDiagram
 | FR-UM-08 | `UserService.ensureCertified`、`CurrentUserContext` |
 | FR-HALL-01~06 | `PickupService.queryHall`、`PickupRequest.isHallVisible`、`PickupStatus.WAITING_ACCEPT` |
 | FR-PU-01~02 | `PickupRequest` 字段和 `publishPickup` 校验 |
-| FR-PU-03~04 | `PaymentService.createPrepay`、`PickupRequest.markWaitingAccept` |
+| FR-PU-03~04 | `PaymentService.createPrepay(payerId, amount, expireAt, businessType, businessTraceNo)`、`PaymentRecord.businessType/businessTraceNo`、`PickupRequest.markWaitingAccept` |
 | FR-PU-05~06 | `PickupService.acceptPickup`、`PickupRequest.canViewPickupCredential` |
-| FR-PU-07~08 | `uploadCompletionProof`、`confirmComplete`、`PaymentService.settlePayment` |
+| FR-PU-07~08 | `uploadCompletionProof(pickupId, acceptorId, fileId)`、`PickupRequest.completionProofFileId`、`confirmComplete`、`PaymentService.settlePayment` |
 | FR-PU-09~11 | `PickupStatus` 状态校验、`cancelPickup`、`expireWaitingPaymentPickups`、`expireOpenPickups` |
-| FR-PU-12 | `queryMyPublished`、`queryMyAccepted` |
-| FR-CR-01~04 | `Evaluation`、`RatingSummary`、`RatingRoleSummary`、`EvaluationHistorySummary`、`EvaluationDetail`、`EvaluationService`，作为 Should 模块 |
+| FR-PU-12 | `PickupSummary`、`queryMyPublished`、`queryMyAccepted` |
+| FR-CR-01~04 | `Evaluation.businessType/businessId/revieweeRoleInBusiness`、`RatingSummary.publisherRoleSummary/acceptorRoleSummary`、`RatingRoleSummary.revieweeRoleInBusiness`、`EvaluationHistorySummary`、`EvaluationDetail`、`EvaluationService`，作为 Should 模块；`EvaluationDetail` 复用 `PickupSummary` 展示关联服务背景 |
 | FR-NT-01~02 | `NotificationRecord`、`NotificationService`，作为 Should 模块 |
