@@ -1,0 +1,2682 @@
+---
+openapi: 3.0.3
+info:
+  title: CampusHub API
+  version: 3.1.0
+  description: |
+    校园互助服务平台 API 规范。本文档已同步 P1 v2.1、P2 v1.2 和 P3 类设计。
+
+    当前 MVP 范围聚焦可信代取服务闭环：用户注册登录、实名认证、实名审核、代取大厅、代取发布/支付/接单/完成、我的代取记录、支付宝沙箱支付、业务模块内图片处理和评价能力。
+servers:
+- url: http://localhost:8080/api/v1
+  description: 本地开发环境
+- url: "${API_BASE_URL}/api/v1"
+  description: 部署环境
+tags:
+- name: Auth
+  description: 注册、登录
+- name: Users
+  description: 用户资料、实名认证、公开主页
+- name: Notifications
+  description: 站内通知查询与已读状态
+- name: PickupRequests
+  description: 代取服务
+- name: Evaluations
+  description: 评价与好评率
+- name: Payments
+  description: 支付记录与支付宝沙箱回调
+- name: Admin
+  description: 管理端实名认证审核
+security:
+- bearerAuth: []
+paths:
+  "/auth/register":
+    post:
+      tags:
+      - Auth
+      summary: 用户注册
+      description: 使用用户名和密码注册。MVP阶段不接入运营商短信验证码，也不强制接入图形验证码；防机器人能力作为后续安全增强。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/RegisterRequest"
+      responses:
+        '200':
+          description: 注册成功。注册接口不签发 token，前端成功后跳转登录页面。
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      nullable: true
+                      description: 无额外返回数据
+              example:
+                code: 0
+                message: ok
+                data: null
+        '400':
+          description: 参数校验失败或业务规则不满足
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40001
+                message: 参数校验失败
+                data: null
+                errors:
+                  request: 请求参数格式或取值不合法
+        '409':
+          description: 重复操作或业务冲突
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40901
+                message: 重复操作或业务冲突
+                data: null
+                errors:
+                  reason: DUPLICATE_OR_CONFLICTED_OPERATION
+  "/auth/login":
+    post:
+      tags:
+      - Auth
+      summary: 用户登录
+      description: 使用用户名和密码登录。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/LoginRequest"
+      responses:
+        '200':
+          description: 登录成功。认证接口只返回会话令牌；完整用户资料由客户端携带 token 调用 GET /users/me 获取。
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      "$ref": "#/components/schemas/LoginSession"
+              example:
+                code: 0
+                message: ok
+                data:
+                  token: string
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+        '403':
+          description: 无权限或账号状态不允许
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40301
+                message: 无权限或账号状态不允许
+                data: null
+                errors:
+                  reason: AUTH_STATUS_NOT_ALLOWED
+  "/users/me":
+    get:
+      tags:
+      - Users
+      summary: 获取当前用户信息
+      description: '无路径参数和查询参数。客户端在 `Authorization: Bearer <token>` 请求头中携带登录接口返回的
+        token，后端从 token 解析当前用户身份。'
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: 当前用户信息
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      "$ref": "#/components/schemas/UserMe"
+              example:
+                code: 0
+                message: ok
+                data:
+                  userId: 1
+                  username: string
+                  studentIdMasked: string
+                  realName: string
+                  nickname: string
+                  college: string
+                  contact: string
+                  authStatus: REVIEWING
+                  role: USER
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+  "/users/me/profile":
+    put:
+      tags:
+      - Users
+      summary: 编辑个人资料
+      description: |
+        支持部分更新昵称、头像、学院和联系方式；头像图片不通过通用文件接口上传，而是随用户资料接口提交，由用户模块保存并控制读取。
+
+        后端保存文件时记录 uploaderId 和 fileUsage，仅用于上传记录追踪、审计排查和孤立文件清理，不表示文件最终业务归属。文件读取权限仍由所属业务模块控制，不开放通用文件读取接口。
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              "$ref": "#/components/schemas/UpdateProfileRequest"
+      responses:
+        '200':
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      nullable: true
+                      description: 无额外返回数据
+              example:
+                code: 0
+                message: ok
+                data: null
+        '400':
+          description: 参数校验失败或业务规则不满足
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40001
+                message: 参数校验失败
+                data: null
+                errors:
+                  request: 请求参数格式或取值不合法
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+  "/users/me/verification":
+    post:
+      tags:
+      - Users
+      summary: 提交实名认证
+      description: |
+        认证材料照片不通过通用文件接口上传，而是随实名认证接口提交，由用户模块和管理模块控制读取。
+
+        后端保存文件时记录 uploaderId 和 fileUsage，仅用于上传记录追踪、审计排查和孤立文件清理，不表示文件最终业务归属。文件读取权限仍由所属业务模块控制，不开放通用文件读取接口。
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              "$ref": "#/components/schemas/VerificationSubmitRequest"
+      responses:
+        '200':
+          description: 已提交审核
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      properties:
+                        authStatus:
+                          "$ref": "#/components/schemas/AuthStatus"
+              example:
+                code: 0
+                message: ok
+                data:
+                  authStatus: REVIEWING
+        '400':
+          description: 参数校验失败或业务规则不满足
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40001
+                message: 参数校验失败
+                data: null
+                errors:
+                  request: 请求参数格式或取值不合法
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+        '403':
+          description: 无权限或账号状态不允许
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40301
+                message: 无权限或账号状态不允许
+                data: null
+                errors:
+                  reason: AUTH_STATUS_NOT_ALLOWED
+        '409':
+          description: 重复操作或业务冲突
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40901
+                message: 重复操作或业务冲突
+                data: null
+                errors:
+                  reason: DUPLICATE_OR_CONFLICTED_OPERATION
+  "/users/{userId}/profile":
+    get:
+      tags:
+      - Users
+      summary: 查看用户公开主页
+      security: []
+      parameters:
+      - "$ref": "#/components/parameters/UserIdPath"
+      - name: includeRating
+        in: query
+        required: false
+        description: 为 true 时返回 ratingSummary；不传或为 false 时 ratingSummary 可为空。
+        schema:
+          type: boolean
+          default: false
+      responses:
+        '200':
+          description: 用户公开主页
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      "$ref": "#/components/schemas/UserPublicProfile"
+              example:
+                code: 0
+                message: ok
+                data:
+                  nickname: string
+                  college: string
+                  contact: string
+                  ratingSummary: null
+        '404':
+          description: 资源不存在
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40401
+                message: 资源不存在
+                data: null
+                errors:
+                  reason: RESOURCE_NOT_FOUND
+  "/users/{userId}/avatar":
+    get:
+      tags:
+      - Users
+      summary: 获取用户头像
+      description: 头像通过用户模块读取，不开放通用文件读取接口。
+      security: []
+      parameters:
+      - "$ref": "#/components/parameters/UserIdPath"
+      responses:
+        '200':
+          description: 头像图片二进制内容
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: 资源不存在
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40401
+                message: 资源不存在
+                data: null
+                errors:
+                  reason: RESOURCE_NOT_FOUND
+  "/users/{userId}/rating-summary":
+    get:
+      tags:
+      - Evaluations
+      summary: 查询用户好评率摘要
+      security: []
+      parameters:
+      - "$ref": "#/components/parameters/UserIdPath"
+      responses:
+        '200':
+          description: 好评率摘要
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      "$ref": "#/components/schemas/RatingSummary"
+              example:
+                code: 0
+                message: ok
+                data:
+                  userId: 1
+                  publisherRoleSummary:
+                    revieweeRoleInBusiness: PUBLISHER
+                    positiveCount: 1
+                    neutralCount: 0
+                    negativeCount: 0
+                    totalCount: 1
+                    positiveRate: 1.0
+                  acceptorRoleSummary:
+                    revieweeRoleInBusiness: ACCEPTOR
+                    positiveCount: 1
+                    neutralCount: 0
+                    negativeCount: 0
+                    totalCount: 1
+                    positiveRate: 1.0
+  "/users/{userId}/evaluations":
+    get:
+      tags:
+      - Evaluations
+      summary: 查询用户收到的评价列表
+      security: []
+      parameters:
+      - "$ref": "#/components/parameters/UserIdPath"
+      - "$ref": "#/components/parameters/Page"
+      - "$ref": "#/components/parameters/PageSize"
+      responses:
+        '200':
+          description: 评价分页
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      "$ref": "#/components/schemas/EvaluationHistoryPage"
+              example:
+                code: 0
+                message: ok
+                data:
+                  total: 1
+                  page: 1
+                  pageSize: 1
+                  list:
+                  - evaluationId: 1
+                    revieweeRoleInBusiness: PUBLISHER
+                    ratingLevel: GOOD
+                    contentPreview: string
+                    createdAt: '2026-06-02T10:00:00'
+  "/users/me/pickup-requests":
+    get:
+      tags:
+      - PickupRequests
+      summary: 查询当前用户参与的代取服务
+      description: 查询当前用户参与的代取服务。role=PUBLISHER 表示查询当前用户发布的代取服务，role=ACCEPTOR 表示查询当前用户接单的代取服务，返回 PickupSummary 列表。
+      parameters:
+      - name: role
+        in: query
+        required: true
+        schema:
+          "$ref": "#/components/schemas/PickupParticipantRole"
+      - name: status
+        in: query
+        required: false
+        description: 不传表示查询全部状态；传值时按指定代取状态筛选。
+        schema:
+          "$ref": "#/components/schemas/PickupStatus"
+      - "$ref": "#/components/parameters/Page"
+      - "$ref": "#/components/parameters/PageSize"
+      responses:
+        '200':
+          description: 当前用户参与的代取服务分页
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      "$ref": "#/components/schemas/PickupSummaryPage"
+              example:
+                code: 0
+                message: ok
+                data:
+                  total: 1
+                  page: 1
+                  pageSize: 1
+                  list:
+                  - pickupId: 1
+                    campus: string
+                    pickupLocation: string
+                    deliveryLocation: string
+                    itemDescriptionPreview: string
+                    rewardType: PAID
+                    rewardAmount: 1.0
+                    status: WAITING_PAYMENT
+                    cancelReason: null
+                    createdAt: '2026-06-02T10:00:00'
+                    completedAt: null
+        '400':
+          description: 参数校验失败，包括缺少或非法 role、非法 status、分页参数越界
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40001
+                message: 参数校验失败
+                data: null
+                errors:
+                  role: role 必填且只能为 PUBLISHER 或 ACCEPTOR
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+  "/users/me/transactions":
+    get:
+      tags:
+      - Payments
+      summary: 查询我的交易记录
+      description: 查询当前用户支付、结算和退款记录。有报酬代取发布后进入 WAITING_PAYMENT，待支付截止时间 expireAt 当前 MVP 固定为预付款创建后 3 分钟；超过 expireAt 后，待支付服务应取消，支付记录应关闭，支付入口不可继续使用。
+      parameters:
+      - name: type
+        in: query
+        schema:
+          type: string
+          enum:
+          - PAYMENT
+          - SETTLEMENT
+          - REFUND
+      - "$ref": "#/components/parameters/Page"
+      - "$ref": "#/components/parameters/PageSize"
+      responses:
+        '200':
+          description: 交易记录分页
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      "$ref": "#/components/schemas/TransactionPage"
+              example:
+                code: 0
+                message: ok
+                data:
+                  total: 1
+                  page: 1
+                  pageSize: 1
+                  list:
+                  - paymentId: 1
+                    type: PAYMENT
+                    businessType: PICKUP_REQUEST
+                    amount: 1.0
+                    status: WAITING_PAY
+                    createdAt: '2026-06-02T10:00:00'
+  "/users/me/notifications":
+    get:
+      tags:
+      - Notifications
+      summary: 查询当前用户站内通知列表
+      description: 站内通知仅通过 HTTP 查询/轮询获取，当前 MVP 不引入 WebSocket。
+      parameters:
+      - "$ref": "#/components/parameters/Page"
+      - "$ref": "#/components/parameters/PageSize"
+      responses:
+        '200':
+          description: 通知分页
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      "$ref": "#/components/schemas/NotificationPage"
+              example:
+                code: 0
+                message: ok
+                data:
+                  total: 1
+                  page: 1
+                  pageSize: 20
+                  list:
+                  - notificationId: 1
+                    type: SYSTEM
+                    title: string
+                    content: string
+                    businessType: PICKUP_REQUEST
+                    businessId: 1
+                    readStatus: UNREAD
+                    createdAt: '2026-06-02T10:00:00'
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+  "/users/me/notifications/unread-count":
+    get:
+      tags:
+      - Notifications
+      summary: 查询当前用户未读通知数量
+      description: 用于前端轮询未读数量，不引入 WebSocket 推送。
+      responses:
+        '200':
+          description: 未读通知数量
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      properties:
+                        unreadCount:
+                          type: integer
+                          minimum: 0
+              example:
+                code: 0
+                message: ok
+                data:
+                  unreadCount: 3
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+  "/users/me/notifications/{notificationId}/read":
+    post:
+      tags:
+      - Notifications
+      summary: 将单条通知标记为已读
+      description: 仅当前通知接收者可操作。
+      parameters:
+      - name: notificationId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      nullable: true
+                      description: 无额外返回数据
+              example:
+                code: 0
+                message: ok
+                data: null
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+        '403':
+          description: 无权限或账号状态不允许
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40301
+                message: 无权限或账号状态不允许
+                data: null
+                errors:
+                  reason: NOT_NOTIFICATION_RECEIVER
+        '404':
+          description: 资源不存在
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40401
+                message: 资源不存在
+                data: null
+                errors:
+                  reason: RESOURCE_NOT_FOUND
+  "/pickup-requests":
+    get:
+      tags:
+      - PickupRequests
+      summary: 浏览代取服务公开列表
+      description: 仅返回 WAITING_ACCEPT 状态的代取服务，支持校区和报酬类型筛选，固定按发布时间倒序展示。
+      security: []
+      parameters:
+      - name: campus
+        in: query
+        required: false
+        description: 不传表示查询全部校区。
+        schema:
+          type: string
+      - name: rewardType
+        in: query
+        required: false
+        description: 不传表示查询全部报酬类型；传值时按有报酬或无报酬筛选。
+        schema:
+          "$ref": "#/components/schemas/RewardType"
+      - "$ref": "#/components/parameters/Page"
+      - "$ref": "#/components/parameters/PageSize"
+      responses:
+        '200':
+          description: 代取服务分页
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      "$ref": "#/components/schemas/PickupRequestPage"
+              example:
+                code: 0
+                message: ok
+                data:
+                  total: 1
+                  page: 1
+                  pageSize: 1
+                  list:
+                  - pickupId: 1
+                    itemDescriptionPreview: string
+                    campus: string
+                    pickupLocation: string
+                    deliveryLocation: string
+                    rewardType: PAID
+                    rewardAmount: 1.0
+                    status: WAITING_ACCEPT
+                    cancelReason: null
+                    publisher:
+                      userId: 1
+                      nickname: string
+                    acceptDeadline: '2026-06-02T10:00:00'
+                    createdAt: '2026-06-02T10:00:00'
+        '400':
+          description: 参数校验失败，包括非法 rewardType 或分页参数越界
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40001
+                message: 参数校验失败
+                data: null
+                errors:
+                  rewardType: rewardType 只能为 PAID 或 UNPAID
+    post:
+      tags:
+      - PickupRequests
+      summary: 发布代取服务
+      description: |
+        发布代取服务。取件凭证图片随代取发布接口提交，由代取服务模块控制读取，不开放通用文件接口。
+
+        后端保存文件时记录 uploaderId 和 fileUsage，仅用于上传记录追踪、审计排查和孤立文件清理，不表示文件最终业务归属。文件读取权限仍由所属业务模块控制，不开放通用文件读取接口。
+
+        有报酬代取发布后进入 WAITING_PAYMENT；待支付截止时间 expireAt 当前 MVP 固定为预付款创建后 3 分钟。超过 expireAt 后，待支付服务应取消，支付记录应关闭，支付入口不可继续使用；前端再次获取支付入口时，如果已超时或状态不允许，应返回 409。
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              "$ref": "#/components/schemas/PickupCreateRequest"
+      responses:
+        '200':
+          description: 发布成功。无报酬服务进入 WAITING_ACCEPT；有报酬服务进入 WAITING_PAYMENT。后端调用支付宝沙箱创建预付款页面，保存支付入口 payEntry，并将该入口返回给前端用于跳转支付。
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      "$ref": "#/components/schemas/PickupCreateResult"
+              example:
+                code: 0
+                message: ok
+                data:
+                  pickupId: 1
+                  status: WAITING_PAYMENT
+                  payEntry: string
+                  expireAt: '2026-06-02T10:00:00'
+        '400':
+          description: 参数校验失败或业务规则不满足
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40001
+                message: 参数校验失败
+                data: null
+                errors:
+                  request: 请求参数格式或取值不合法
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+        '403':
+          description: 无权限或账号状态不允许
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40301
+                message: 无权限或账号状态不允许
+                data: null
+                errors:
+                  reason: AUTH_STATUS_NOT_ALLOWED
+  "/pickup-requests/{pickupId}":
+    get:
+      tags:
+      - PickupRequests
+      summary: 查看代取服务详情
+      description: 该接口保持公开访问，仅返回非敏感基础信息；取件凭证和完成凭证图片统一通过受保护接口读取。
+      security: []
+      parameters:
+      - "$ref": "#/components/parameters/PickupIdPath"
+      responses:
+        '200':
+          description: 代取服务详情。敏感图片不在详情中直接返回。
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      "$ref": "#/components/schemas/PickupRequestDetail"
+              example:
+                code: 0
+                message: ok
+                data:
+                  pickupId: 1
+                  campus: string
+                  pickupLocation: string
+                  deliveryLocation: string
+                  rewardType: PAID
+                  rewardAmount: 1.0
+                  status: WAITING_PAYMENT
+                  cancelReason: null
+                  publisher:
+                    userId: 1
+                    nickname: string
+                  acceptDeadline: '2026-06-02T10:00:00'
+                  createdAt: '2026-06-02T10:00:00'
+                  itemDescription: string
+                  acceptor: null
+                  acceptedAt: null
+                  completedAt: null
+        '404':
+          description: 资源不存在
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40401
+                message: 资源不存在
+                data: null
+                errors:
+                  reason: RESOURCE_NOT_FOUND
+  "/pickup-requests/{pickupId}/credential":
+    get:
+      tags:
+      - PickupRequests
+      summary: 获取代取服务取件凭证图片
+      description: 受保护的取件凭证读取接口。仅接单方在允许状态下可读取；发布方可按业务需要读取自己上传的凭证。未登录、非参与者、状态不允许时返回对应错误。
+      parameters:
+      - "$ref": "#/components/parameters/PickupIdPath"
+      responses:
+        '200':
+          description: 取件凭证图片二进制内容
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+        '403':
+          description: 无权限或账号状态不允许，例如非服务参与者
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40301
+                message: 无权限或账号状态不允许
+                data: null
+                errors:
+                  reason: NOT_PICKUP_PARTICIPANT
+        '404':
+          description: 资源不存在
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40401
+                message: 资源不存在
+                data: null
+                errors:
+                  reason: RESOURCE_NOT_FOUND
+        '409':
+          description: 业务状态冲突，例如服务状态不允许读取取件凭证
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40901
+                message: 业务状态冲突
+                data: null
+                errors:
+                  reason: PICKUP_STATUS_NOT_ALLOWED
+  "/pickup-requests/{pickupId}/payment-entry":
+    get:
+      tags:
+      - PickupRequests
+      summary: 获取待支付代取服务的支付入口
+      description: 发布方可在 WAITING_PAYMENT 且未超过 expireAt 时获取后端保存的支付宝沙箱支付入口 payEntry，前端拿到 payEntry 后跳转支付宝沙箱页面继续支付。有报酬代取发布后进入 WAITING_PAYMENT；待支付截止时间 expireAt 当前 MVP 固定为预付款创建后 3 分钟。超过 expireAt 后，待支付服务应取消，支付记录应关闭，支付入口不可继续使用。如果订单不是 WAITING_PAYMENT、已过期、已取消、状态不允许或无权限，返回对应错误；前端再次获取支付入口时，如果已超时或状态不允许，应返回 409。
+      parameters:
+      - "$ref": "#/components/parameters/PickupIdPath"
+      responses:
+        '200':
+          description: 返回后端保存的支付宝沙箱支付入口
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      "$ref": "#/components/schemas/PickupPaymentResult"
+              example:
+                code: 0
+                message: ok
+                data:
+                  status: WAITING_PAYMENT
+                  payEntry: string
+                  expireAt: '2026-06-02T10:00:00'
+        '400':
+          description: 参数校验失败或业务规则不满足
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40001
+                message: 参数校验失败
+                data: null
+                errors:
+                  request: 请求参数格式或取值不合法
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+        '403':
+          description: 无权限或账号状态不允许
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40301
+                message: 无权限或账号状态不允许
+                data: null
+                errors:
+                  reason: AUTH_STATUS_NOT_ALLOWED
+        '409':
+          description: 业务状态冲突，例如服务不是 WAITING_PAYMENT、支付入口已过期或服务已取消
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40901
+                message: 业务状态冲突
+                data: null
+                errors:
+                  reason: PICKUP_NOT_WAITING_PAYMENT
+  "/pickup-requests/{pickupId}/accept":
+    post:
+      tags:
+      - PickupRequests
+      summary: 接单
+      description: 接单前后端应按前置文档要求先进行业务访问时的超时校验；如果服务已超过 acceptDeadline 且尚未被接单，应先将服务流转为 CANCELLED，cancelReason=ACCEPT_DEADLINE_EXPIRED，本次接单请求返回 409。接单成功后服务进入进行中。
+      parameters:
+      - "$ref": "#/components/parameters/PickupIdPath"
+      responses:
+        '200':
+          description: 接单成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      "$ref": "#/components/schemas/PickupAcceptResult"
+              example:
+                code: 0
+                message: ok
+                data:
+                  status: IN_PROGRESS
+                  acceptedAt: '2026-06-02T10:00:00'
+        '400':
+          description: 参数校验失败或业务规则不满足
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40001
+                message: 参数校验失败
+                data: null
+                errors:
+                  request: 请求参数格式或取值不合法
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+        '403':
+          description: 无权限或账号状态不允许
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40301
+                message: 无权限或账号状态不允许
+                data: null
+                errors:
+                  reason: AUTH_STATUS_NOT_ALLOWED
+        '409':
+          description: 业务状态冲突，例如服务已超过 acceptDeadline 并流转为 CANCELLED、服务已被接单或状态不允许接单
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40901
+                message: 业务状态冲突
+                data: null
+                errors:
+                  reason: ACCEPT_DEADLINE_EXPIRED
+  "/pickup-requests/{pickupId}/completion-proof":
+    post:
+      tags:
+      - PickupRequests
+      summary: 上传完成凭证
+      description: |
+        完成凭证照片通过代取服务模块上传和读取，不开放通用文件接口。当前 MVP 仅支持单张完成凭证图片。非参与者或无权限返回 403；状态不允许、重复上传、服务已完成或已取消等业务冲突返回 409。
+
+        后端保存文件时记录 uploaderId 和 fileUsage，仅用于上传记录追踪、审计排查和孤立文件清理，不表示文件最终业务归属。文件读取权限仍由所属业务模块控制，不开放通用文件读取接口。
+      parameters:
+      - "$ref": "#/components/parameters/PickupIdPath"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+              - proofImage
+              properties:
+                proofImage:
+                  type: string
+                  format: binary
+                  description: 完成凭证图片，JPG/PNG，单张不超过5MB
+      responses:
+        '200':
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      nullable: true
+                      description: 无额外返回数据
+              example:
+                code: 0
+                message: ok
+                data: null
+        '400':
+          description: 参数校验失败或业务规则不满足
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40001
+                message: 参数校验失败
+                data: null
+                errors:
+                  request: 请求参数格式或取值不合法
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+        '403':
+          description: 非参与者或无权限
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40301
+                message: 无权限或账号状态不允许
+                data: null
+                errors:
+                  reason: AUTH_STATUS_NOT_ALLOWED
+        '409':
+          description: 业务状态冲突，例如状态不允许、重复上传、服务已完成或已取消
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40901
+                message: 业务状态冲突
+                data: null
+                errors:
+                  reason: PICKUP_STATUS_NOT_ALLOWED
+    get:
+      tags:
+      - PickupRequests
+      summary: 获取代取服务完成凭证图片
+      description: 仅服务发布方和接单方可读取。非参与者或无权限返回 403；状态不允许、服务已取消或尚未上传完成凭证等业务冲突返回 409。
+      parameters:
+      - "$ref": "#/components/parameters/PickupIdPath"
+      responses:
+        '200':
+          description: 完成凭证图片二进制内容
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+        '403':
+          description: 非参与者或无权限
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40301
+                message: 无权限或账号状态不允许
+                data: null
+                errors:
+                  reason: AUTH_STATUS_NOT_ALLOWED
+        '404':
+          description: 资源不存在
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40401
+                message: 资源不存在
+                data: null
+                errors:
+                  reason: RESOURCE_NOT_FOUND
+        '409':
+          description: 业务状态冲突，例如状态不允许或尚未上传完成凭证
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40901
+                message: 业务状态冲突
+                data: null
+                errors:
+                  reason: COMPLETION_PROOF_NOT_AVAILABLE
+  "/pickup-requests/{pickupId}/completion-confirmation":
+    post:
+      tags:
+      - PickupRequests
+      summary: 提交完成确认
+      description: 仅发布方可确认完成；服务必须处于 IN_PROGRESS，且接单方必须已上传完成凭证后，发布方才能确认完成。确认成功后状态从 IN_PROGRESS 流转为 COMPLETED；有报酬服务必要时触发结算。非参与者或无权限返回 403；未上传完成凭证、状态不允许、重复确认、服务已完成或已取消等业务冲突返回 409。
+      parameters:
+      - "$ref": "#/components/parameters/PickupIdPath"
+      responses:
+        '200':
+          description: 完成确认成功，必要时触发结算
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      properties:
+                        status:
+                          "$ref": "#/components/schemas/PickupStatus"
+                        paymentStatus:
+                          "$ref": "#/components/schemas/PaymentStatus"
+                        completedAt:
+                          type: string
+                          format: date-time
+              example:
+                code: 0
+                message: ok
+                data:
+                  status: COMPLETED
+                  paymentStatus: SETTLED
+                  completedAt: '2026-06-02T10:00:00'
+        '400':
+          description: 参数校验失败或业务规则不满足
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40001
+                message: 参数校验失败
+                data: null
+                errors:
+                  request: 请求参数格式或取值不合法
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+        '403':
+          description: 非参与者或无权限
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40301
+                message: 无权限或账号状态不允许
+                data: null
+                errors:
+                  reason: AUTH_STATUS_NOT_ALLOWED
+        '409':
+          description: 业务状态冲突，例如服务不是 IN_PROGRESS、尚未上传完成凭证或已经完成/取消
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40901
+                message: 业务状态冲突
+                data: null
+                errors:
+                  reason: COMPLETION_PROOF_NOT_AVAILABLE
+  "/pickup-requests/{pickupId}/cancel":
+    post:
+      tags:
+      - PickupRequests
+      summary: 取消代取服务
+      description: 发布方可在 WAITING_PAYMENT 或 WAITING_ACCEPT 状态取消服务。WAITING_PAYMENT 表示尚未完成预付款，取消时关闭待支付记录，paymentStatus 为 CLOSED；WAITING_ACCEPT 状态下，无报酬服务直接取消服务，有报酬且已完成预付款的服务取消时应触发支付宝沙箱退款，paymentStatus 为 REFUNDED。IN_PROGRESS 状态下发布方不能单方面取消；COMPLETED 和 CANCELLED 状态不能取消。非参与者或无权限返回 403；状态不允许、重复取消、已完成或已取消等业务冲突返回 409。有报酬代取发布后进入 WAITING_PAYMENT；待支付截止时间 expireAt 当前 MVP 固定为预付款创建后 3 分钟。超过 expireAt 后，待支付服务应取消，支付记录应关闭，支付入口不可继续使用。
+      parameters:
+      - "$ref": "#/components/parameters/PickupIdPath"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/ReasonRequest"
+      responses:
+        '200':
+          description: 取消成功。WAITING_PAYMENT 取消时关闭待支付记录，paymentStatus 为 CLOSED；WAITING_ACCEPT 取消时，无报酬服务直接取消，有报酬且已完成预付款的服务触发支付宝沙箱退款，paymentStatus 为 REFUNDED。响应中的 paymentStatus 可能为 CLOSED 或 REFUNDED。
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      properties:
+                        status:
+                          "$ref": "#/components/schemas/PickupStatus"
+                        paymentStatus:
+                          "$ref": "#/components/schemas/PaymentStatus"
+                        cancelReason:
+                          "$ref": "#/components/schemas/PickupCancelReason"
+              example:
+                code: 0
+                message: ok
+                data:
+                  status: CANCELLED
+                  paymentStatus: CLOSED
+                  cancelReason: USER_CANCELLED
+        '400':
+          description: 参数校验失败或业务规则不满足
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40001
+                message: 参数校验失败
+                data: null
+                errors:
+                  request: 请求参数格式或取值不合法
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+        '403':
+          description: 非参与者或无权限
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40301
+                message: 无权限或账号状态不允许
+                data: null
+                errors:
+                  reason: AUTH_STATUS_NOT_ALLOWED
+        '409':
+          description: 业务状态冲突，例如服务处于 IN_PROGRESS、COMPLETED 或 CANCELLED
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40901
+                message: 业务状态冲突
+                data: null
+                errors:
+                  reason: PICKUP_STATUS_NOT_ALLOWED
+  "/pickup-requests/{pickupId}/evaluations":
+    post:
+      tags:
+      - Evaluations
+      summary: 提交代取服务评价
+      description: 前端可先调用 GET /pickup-requests/{pickupId}/evaluation-eligibility 判断是否展示评价入口；提交时后端仍重新校验当前用户是否为服务参与者、服务是否已完成、是否已评价，并根据 pickupId 和当前登录用户自动推导被评价人。
+      parameters:
+      - "$ref": "#/components/parameters/PickupIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/EvaluationCreateRequest"
+      responses:
+        '200':
+          description: 评价提交成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      properties:
+                        evaluationId:
+                          type: integer
+                          format: int64
+              example:
+                code: 0
+                message: ok
+                data:
+                  evaluationId: 1
+        '400':
+          description: 参数校验失败或业务规则不满足
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40001
+                message: 参数校验失败
+                data: null
+                errors:
+                  request: 请求参数格式或取值不合法
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+        '403':
+          description: 非参与者或无权限
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40301
+                message: 无权限或账号状态不允许
+                data: null
+                errors:
+                  reason: AUTH_STATUS_NOT_ALLOWED
+        '409':
+          description: 业务状态冲突，例如服务未完成、已评价、已取消或状态不允许评价
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40901
+                message: 重复操作或业务冲突
+                data: null
+                errors:
+                  reason: PICKUP_EVALUATION_NOT_ALLOWED
+  "/pickup-requests/{pickupId}/evaluation-eligibility":
+    get:
+      tags:
+      - Evaluations
+      summary: 查询当前用户对代取服务的评价资格
+      description: 用于前端决定是否展示评价入口；仅作展示辅助，提交评价时后端仍必须重新校验。
+      parameters:
+      - "$ref": "#/components/parameters/PickupIdPath"
+      responses:
+        '200':
+          description: 评价资格
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      "$ref": "#/components/schemas/EvaluationEligibility"
+              example:
+                code: 0
+                message: ok
+                data:
+                  canEvaluate: true
+                  reviewee:
+                    userId: 1
+                    nickname: string
+                  reason: null
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+        '403':
+          description: 无权限或账号状态不允许
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40301
+                message: 无权限或账号状态不允许
+                data: null
+                errors:
+                  reason: AUTH_STATUS_NOT_ALLOWED
+        '404':
+          description: 资源不存在
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40401
+                message: 资源不存在
+                data: null
+                errors:
+                  reason: RESOURCE_NOT_FOUND
+  "/payments/alipay/notify":
+    post:
+      tags:
+      - Payments
+      summary: 支付宝沙箱异步回调
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+              - out_trade_no
+              - trade_no
+              - trade_status
+              - total_amount
+              - sign
+              - sign_type
+              properties:
+                out_trade_no:
+                  type: string
+                trade_no:
+                  type: string
+                trade_status:
+                  type: string
+                  enum:
+                  - TRADE_SUCCESS
+                  - TRADE_FINISHED
+                total_amount:
+                  type: string
+                sign:
+                  type: string
+                sign_type:
+                  type: string
+                  enum:
+                  - RSA2
+      responses:
+        '200':
+          description: 支付宝要求返回纯文本 success 或 failure
+          content:
+            text/plain:
+              schema:
+                type: string
+                enum:
+                - success
+                - failure
+  "/payments/{paymentId}":
+    get:
+      tags:
+      - Payments
+      summary: 查询支付记录
+      description: 查询普通用户可见的支付记录。有报酬代取发布后进入 WAITING_PAYMENT，待支付截止时间 expireAt 当前 MVP 固定为预付款创建后 3 分钟；超过 expireAt 后，待支付服务应取消，支付记录应关闭，支付入口不可继续使用。支付宝交易号、业务追踪号、支付入口等内部追踪字段仅保留在后端实现中，不作为普通用户支付详情响应字段暴露；支付入口仅通过 GET /pickup-requests/{pickupId}/payment-entry 返回。
+      parameters:
+      - name: paymentId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: 支付记录
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      "$ref": "#/components/schemas/PaymentRecord"
+              example:
+                code: 0
+                message: ok
+                data:
+                  paymentId: 1
+                  payerId: 1
+                  receiverId: null
+                  businessType: PICKUP_REQUEST
+                  amount: 1.0
+                  status: WAITING_PAY
+                  expireAt: '2026-06-02T10:00:00'
+                  closeReason: null
+                  statusChangedAt: '2026-06-02T10:00:00'
+                  createdAt: '2026-06-02T10:00:00'
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+        '403':
+          description: 无权限或账号状态不允许
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40301
+                message: 无权限或账号状态不允许
+                data: null
+                errors:
+                  reason: AUTH_STATUS_NOT_ALLOWED
+        '404':
+          description: 资源不存在
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40401
+                message: 资源不存在
+                data: null
+                errors:
+                  reason: RESOURCE_NOT_FOUND
+  "/admin/verification-reviews":
+    get:
+      tags:
+      - Admin
+      summary: 查询实名认证审核记录
+      parameters:
+      - name: status
+        in: query
+        schema:
+          "$ref": "#/components/schemas/ReviewStatus"
+      - "$ref": "#/components/parameters/Page"
+      - "$ref": "#/components/parameters/PageSize"
+      responses:
+        '200':
+          description: 实名认证审核记录分页
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/VerificationReviewPageResponse"
+              example:
+                code: 0
+                message: ok
+                data:
+                  total: 1
+                  page: 1
+                  pageSize: 1
+                  list:
+                  - id: 1
+                    userId: 1
+                    username: string
+                    nickname: string
+                    studentIdMasked: "2026****001"
+                    realName: string
+                    status: PENDING
+                    rejectReason: null
+                    reviewerId: null
+                    createdAt: '2026-06-02T10:00:00'
+                    reviewedAt: null
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+        '403':
+          description: 非管理员
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40301
+                message: 无权限或账号状态不允许
+                data: null
+                errors:
+                  reason: ADMIN_REQUIRED
+  "/admin/verification-reviews/{reviewId}/handle":
+    post:
+      tags:
+      - Admin
+      summary: 处理实名认证审核
+      parameters:
+      - "$ref": "#/components/parameters/ReviewIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/AdminHandleRequest"
+      responses:
+        '200':
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      nullable: true
+                      description: 无额外返回数据
+              example:
+                code: 0
+                message: ok
+                data: null
+        '400':
+          description: 参数校验失败或业务规则不满足
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40001
+                message: 参数校验失败
+                data: null
+                errors:
+                  request: 请求参数格式或取值不合法
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+        '403':
+          description: 非管理员
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40301
+                message: 无权限或账号状态不允许
+                data: null
+                errors:
+                  reason: ADMIN_REQUIRED
+        '404':
+          description: 审核记录不存在
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40401
+                message: 资源不存在
+                data: null
+                errors:
+                  reason: RESOURCE_NOT_FOUND
+        '409':
+          description: 审核记录已处理，不能重复审核
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40901
+                message: 业务状态冲突
+                data: null
+                errors:
+                  reason: VERIFICATION_REVIEW_ALREADY_HANDLED
+  "/admin/verification-reviews/{reviewId}/image":
+    get:
+      tags:
+      - Admin
+      summary: 获取实名认证材料照片
+      description: 仅管理员可通过实名认证审核模块读取认证照片，不开放通用文件读取接口。
+      parameters:
+      - "$ref": "#/components/parameters/ReviewIdPath"
+      responses:
+        '200':
+          description: 实名认证材料照片二进制内容
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+        '403':
+          description: 非管理员
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40301
+                message: 无权限或账号状态不允许
+                data: null
+                errors:
+                  reason: ADMIN_REQUIRED
+        '404':
+          description: 资源不存在
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40401
+                message: 资源不存在
+                data: null
+                errors:
+                  reason: RESOURCE_NOT_FOUND
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: pageSize
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50
+        default: 20
+    UserIdPath:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+    PickupIdPath:
+      name: pickupId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+    ReviewIdPath:
+      name: reviewId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+  schemas:
+    ApiResponse:
+      type: object
+      required:
+      - code
+      - message
+      - data
+      properties:
+        code:
+          type: integer
+          description: 业务状态码。0 表示成功；非 0 表示业务错误码，错误码前 3 位与对应 HTTP 状态码一致，例如 40001 表示
+            400 类参数错误。
+        message:
+          type: string
+          description: 面向前端展示或调试的简短处理结果说明。
+        data:
+          type: object
+          nullable: true
+          description: 成功响应数据；成功但无额外数据时固定为 null。
+    ErrorResponse:
+      type: object
+      required:
+      - code
+      - message
+      - data
+      - errors
+      properties:
+        code:
+          type: integer
+          description: 业务错误码。当前 MVP 使用：40001=请求参数错误，40101=认证失败，40301=权限或账号状态不允许，40401=资源不存在，40901=业务状态冲突，50001=系统内部异常，50201=第三方服务异常。
+        message:
+          type: string
+          description: 面向前端展示或调试的错误说明。
+        data:
+          type: object
+          nullable: true
+          description: 错误响应固定为 null。
+        errors:
+          type: object
+          nullable: true
+          description: 结构化错误详情。参数错误时直接使用字段名作为 key，例如 request、password；状态类错误使用 reason。
+          additionalProperties: true
+    RegisterRequest:
+      type: object
+      required:
+      - username
+      - password
+      properties:
+        username:
+          type: string
+          description: 登录账号，平台内唯一，不作为公开展示名
+          minLength: 3
+          maxLength: 30
+          pattern: "^[A-Za-z0-9_]+$"
+        password:
+          type: string
+          format: password
+          description: MVP阶段请求体直接传原始密码字段，不做前端加密；后端保存时必须进行加盐哈希，不保存明文。
+    LoginRequest:
+      type: object
+      required:
+      - username
+      - password
+      properties:
+        username:
+          type: string
+          description: 登录账号
+        password:
+          type: string
+          format: password
+          description: MVP阶段请求体直接传原始密码字段，不做前端加密；后端用该字段校验密码哈希。
+    LoginSession:
+      type: object
+      required:
+      - token
+      description: 认证成功后的会话令牌。完整用户资料请调用 GET /users/me 获取。
+      properties:
+        token:
+          type: string
+    UserMe:
+      type: object
+      properties:
+        userId:
+          type: integer
+          format: int64
+          description: 当前用户标识，可用于读取头像等当前用户资源
+        username:
+          type: string
+          description: 登录账号，仅当前用户本人可见
+        studentIdMasked:
+          type: string
+          nullable: true
+        realName:
+          type: string
+          nullable: true
+        nickname:
+          type: string
+          description: 公开展示昵称，可修改，可重复
+        college:
+          type: string
+          nullable: true
+        contact:
+          type: string
+          nullable: true
+        authStatus:
+          "$ref": "#/components/schemas/AuthStatus"
+        role:
+          type: string
+          enum:
+          - USER
+          - ADMIN
+    UserPublicProfile:
+      type: object
+      properties:
+        nickname:
+          type: string
+          description: 公开展示昵称
+        college:
+          type: string
+          nullable: true
+        contact:
+          type: string
+          nullable: true
+          description: 用户公开联系方式，选填；未填写时为空或不展示。该字段属于用户主动填写的公开个人资料。
+        ratingSummary:
+          "$ref": "#/components/schemas/RatingSummary"
+          nullable: true
+          description: 仅 includeRating=true 时返回，否则为空。
+    UpdateProfileRequest:
+      type: object
+      minProperties: 1
+      properties:
+        nickname:
+          type: string
+          description: 公开展示昵称，可修改，可重复；不传表示不修改昵称
+        avatar:
+          type: string
+          format: binary
+          nullable: true
+          description: 可选头像图片，JPG/PNG，单张不超过5MB；不传表示不修改头像
+        college:
+          type: string
+          nullable: true
+        contact:
+          type: string
+          nullable: true
+    VerificationSubmitRequest:
+      type: object
+      required:
+      - studentId
+      - realName
+      - verificationImage
+      properties:
+        studentId:
+          type: string
+        realName:
+          type: string
+        verificationImage:
+          type: string
+          format: binary
+          description: 一张实名认证材料照片，JPG/PNG，单张不超过5MB
+    PickupCreateRequest:
+      type: object
+      required:
+      - campus
+      - pickupLocation
+      - deliveryLocation
+      - itemDescription
+      - pickupCredential
+      - rewardType
+      - acceptDeadline
+      properties:
+        campus:
+          type: string
+        pickupLocation:
+          type: string
+        deliveryLocation:
+          type: string
+        itemDescription:
+          type: string
+        pickupCredential:
+          type: string
+          format: binary
+          description: 取件凭证图片，JPG/PNG，单张不超过5MB
+        rewardType:
+          "$ref": "#/components/schemas/RewardType"
+        rewardAmount:
+          type: number
+          format: decimal
+          minimum: 1
+          maximum: 200
+          nullable: true
+        acceptDeadline:
+          type: string
+          format: date-time
+    PickupCreateResult:
+      type: object
+      properties:
+        pickupId:
+          type: integer
+          format: int64
+        status:
+          "$ref": "#/components/schemas/PickupStatus"
+        payEntry:
+          type: string
+          nullable: true
+          description: 支付宝沙箱支付页面 URL。有报酬服务发布后由后端创建并保存，前端收到后跳转到该地址完成预付款；无报酬服务为空。
+        expireAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: 待支付截止时间，MVP 固定为预付款创建后 3 分钟；无报酬服务为空。
+    PickupPaymentResult:
+      type: object
+      properties:
+        status:
+          "$ref": "#/components/schemas/PickupStatus"
+        payEntry:
+          type: string
+          description: 后端保存的支付宝沙箱支付页面 URL，供前端重新跳转支付。
+        expireAt:
+          type: string
+          format: date-time
+          description: 待支付截止时间，超过该时间后服务应被取消，支付入口不再可用。
+    PickupAcceptResult:
+      type: object
+      properties:
+        status:
+          "$ref": "#/components/schemas/PickupStatus"
+        acceptedAt:
+          type: string
+          format: date-time
+    PickupRequestSummary:
+      type: object
+      properties:
+        pickupId:
+          type: integer
+          format: int64
+        campus:
+          type: string
+        pickupLocation:
+          type: string
+        deliveryLocation:
+          type: string
+        itemDescriptionPreview:
+          type: string
+        rewardType:
+          "$ref": "#/components/schemas/RewardType"
+        rewardAmount:
+          type: number
+          format: decimal
+          nullable: true
+        status:
+          "$ref": "#/components/schemas/PickupStatus"
+        cancelReason:
+          "$ref": "#/components/schemas/PickupCancelReason"
+          nullable: true
+          description: 仅当 status=CANCELLED 时用于解释代取服务进入取消状态的来源；不是新的业务状态。
+        publisher:
+          "$ref": "#/components/schemas/UserSummary"
+        acceptDeadline:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    PickupRequestDetail:
+      allOf:
+      - "$ref": "#/components/schemas/PickupRequestSummary"
+      - type: object
+        properties:
+          itemDescription:
+            type: string
+          acceptor:
+            "$ref": "#/components/schemas/UserSummary"
+            nullable: true
+          acceptedAt:
+            type: string
+            format: date-time
+            nullable: true
+          completedAt:
+            type: string
+            format: date-time
+            nullable: true
+    PickupRequestPage:
+      allOf:
+      - "$ref": "#/components/schemas/PageResult"
+      - type: object
+        properties:
+          list:
+            type: array
+            items:
+              "$ref": "#/components/schemas/PickupRequestSummary"
+    PickupSummary:
+      type: object
+      description: 代取服务通用展示摘要，用于我的发布、我的接单和评价详情中的关联服务背景。
+      properties:
+        pickupId:
+          type: integer
+          format: int64
+        campus:
+          type: string
+        pickupLocation:
+          type: string
+        deliveryLocation:
+          type: string
+        itemDescriptionPreview:
+          type: string
+        rewardType:
+          "$ref": "#/components/schemas/RewardType"
+        rewardAmount:
+          type: number
+          format: decimal
+          nullable: true
+        status:
+          "$ref": "#/components/schemas/PickupStatus"
+        cancelReason:
+          "$ref": "#/components/schemas/PickupCancelReason"
+          nullable: true
+          description: 仅当 status=CANCELLED 时返回，用于说明代取服务进入取消状态的来源；不是新的业务状态。
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+    PickupSummaryPage:
+      allOf:
+      - "$ref": "#/components/schemas/PageResult"
+      - type: object
+        properties:
+          list:
+            type: array
+            items:
+              "$ref": "#/components/schemas/PickupSummary"
+    EvaluationCreateRequest:
+      type: object
+      required:
+      - ratingLevel
+      properties:
+        ratingLevel:
+          "$ref": "#/components/schemas/RatingLevel"
+        content:
+          type: string
+          nullable: true
+          description: 差评必填。被评价人不由前端提交，后端根据 pickupId 和当前登录用户自动推导。
+    EvaluationEligibility:
+      type: object
+      properties:
+        canEvaluate:
+          type: boolean
+        reviewee:
+          "$ref": "#/components/schemas/UserSummary"
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+          enum:
+          - NOT_COMPLETED
+          - NOT_PARTICIPANT
+          - ALREADY_EVALUATED
+          - ACCOUNT_NOT_ALLOWED
+    EvaluationHistorySummary:
+      type: object
+      properties:
+        evaluationId:
+          type: integer
+          format: int64
+        revieweeRoleInBusiness:
+          "$ref": "#/components/schemas/PickupParticipantRole"
+        ratingLevel:
+          "$ref": "#/components/schemas/RatingLevel"
+        contentPreview:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    EvaluationHistoryPage:
+      allOf:
+      - "$ref": "#/components/schemas/PageResult"
+      - type: object
+        properties:
+          list:
+            type: array
+            items:
+              "$ref": "#/components/schemas/EvaluationHistorySummary"
+    RatingSummary:
+      type: object
+      description: 按被评价人在代取服务中的角色分别动态聚合计算，不缓存结果。publisherRoleSummary 表示该用户作为发布方时收到的评价统计；acceptorRoleSummary 表示该用户作为接单方时收到的评价统计。
+      properties:
+        userId:
+          type: integer
+          format: int64
+        publisherRoleSummary:
+          "$ref": "#/components/schemas/RatingRoleSummary"
+        acceptorRoleSummary:
+          "$ref": "#/components/schemas/RatingRoleSummary"
+    RatingRoleSummary:
+      type: object
+      properties:
+        revieweeRoleInBusiness:
+          "$ref": "#/components/schemas/PickupParticipantRole"
+        positiveCount:
+          type: integer
+        neutralCount:
+          type: integer
+        negativeCount:
+          type: integer
+        totalCount:
+          type: integer
+        positiveRate:
+          type: number
+          format: double
+    PaymentRecord:
+      type: object
+      properties:
+        paymentId:
+          type: integer
+          format: int64
+        payerId:
+          type: integer
+          format: int64
+        receiverId:
+          type: integer
+          format: int64
+          nullable: true
+        businessType:
+          "$ref": "#/components/schemas/BusinessType"
+        amount:
+          type: number
+          format: decimal
+        status:
+          "$ref": "#/components/schemas/PaymentStatus"
+        expireAt:
+          type: string
+          format: date-time
+          description: 待支付截止时间，MVP 固定为预付款创建后 3 分钟；超过该时间后服务应取消，支付记录应关闭。
+        closeReason:
+          type: string
+          nullable: true
+        statusChangedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    TransactionPage:
+      allOf:
+      - "$ref": "#/components/schemas/PageResult"
+      - type: object
+        properties:
+          list:
+            type: array
+            items:
+              type: object
+              properties:
+                paymentId:
+                  type: integer
+                  format: int64
+                type:
+                  type: string
+                  enum:
+                  - PAYMENT
+                  - SETTLEMENT
+                  - REFUND
+                businessType:
+                  "$ref": "#/components/schemas/BusinessType"
+                amount:
+                  type: number
+                  format: decimal
+                status:
+                  "$ref": "#/components/schemas/PaymentStatus"
+                createdAt:
+                  type: string
+                  format: date-time
+    NotificationItem:
+      type: object
+      properties:
+        notificationId:
+          type: integer
+          format: int64
+        type:
+          type: string
+          description: 通知类型，用于前端展示分类；当前 MVP 可使用 SYSTEM、PICKUP、PAYMENT 等业务值。
+        title:
+          type: string
+        content:
+          type: string
+        businessType:
+          "$ref": "#/components/schemas/BusinessType"
+        businessId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 关联业务主键，例如代取服务 pickupId；无业务关联时为空。
+        readStatus:
+          type: string
+          enum:
+          - UNREAD
+          - READ
+        createdAt:
+          type: string
+          format: date-time
+    NotificationPage:
+      allOf:
+      - "$ref": "#/components/schemas/PageResult"
+      - type: object
+        properties:
+          list:
+            type: array
+            items:
+              "$ref": "#/components/schemas/NotificationItem"
+    UserSummary:
+      type: object
+      properties:
+        userId:
+          type: integer
+          format: int64
+        nickname:
+          type: string
+          description: 公开展示昵称
+        ratingSummary:
+          "$ref": "#/components/schemas/RatingSummary"
+          nullable: true
+          description: 仅在明确需要评分摘要的接口或 includeRating=true 的场景中返回，否则为空；代取大厅、我的代取列表等普通列表默认不返回评分摘要。
+    PageResult:
+      type: object
+      properties:
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        pageSize:
+          type: integer
+    ReasonRequest:
+      type: object
+      required:
+      - reason
+      properties:
+        reason:
+          type: string
+          minLength: 1
+    VerificationReviewSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        userId:
+          type: integer
+          format: int64
+        username:
+          type: string
+        nickname:
+          type: string
+          nullable: true
+        studentIdMasked:
+          type: string
+          nullable: true
+        realName:
+          type: string
+        status:
+          "$ref": "#/components/schemas/ReviewStatus"
+        rejectReason:
+          type: string
+          nullable: true
+        reviewerId:
+          type: integer
+          format: int64
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        reviewedAt:
+          type: string
+          format: date-time
+          nullable: true
+    VerificationReviewPage:
+      allOf:
+      - "$ref": "#/components/schemas/PageResult"
+      - type: object
+        properties:
+          list:
+            type: array
+            items:
+              "$ref": "#/components/schemas/VerificationReviewSummary"
+    VerificationReviewPageResponse:
+      allOf:
+      - "$ref": "#/components/schemas/ApiResponse"
+      - type: object
+        properties:
+          data:
+            "$ref": "#/components/schemas/VerificationReviewPage"
+    AdminHandleRequest:
+      type: object
+      required:
+      - result
+      properties:
+        result:
+          type: string
+          enum:
+          - APPROVE
+          - REJECT
+        reason:
+          type: string
+          nullable: true
+    ReviewStatus:
+      type: string
+      enum:
+      - PENDING
+      - APPROVED
+      - REJECTED
+    BusinessType:
+      type: string
+      description: 业务类型，仅用于支付记录、通知等记录与业务请求的追踪、幂等校验、支付宝回调匹配、日志排查和异常定位，不表示支付模块拥有或维护代取业务状态。
+      enum:
+      - PICKUP_REQUEST
+    AuthStatus:
+      type: string
+      enum:
+      - UNVERIFIED
+      - REVIEWING
+      - APPROVED
+      - REJECTED
+    PickupStatus:
+      type: string
+      enum:
+      - WAITING_PAYMENT
+      - WAITING_ACCEPT
+      - IN_PROGRESS
+      - COMPLETED
+      - CANCELLED
+    PickupCancelReason:
+      type: string
+      description: 用于说明代取服务进入 CANCELLED 状态的来源，不是新的业务状态。
+      enum:
+      - USER_CANCELLED
+      - PAYMENT_EXPIRED
+      - ACCEPT_DEADLINE_EXPIRED
+      - SYSTEM_CANCELLED
+    RewardType:
+      type: string
+      enum:
+      - PAID
+      - UNPAID
+    PickupParticipantRole:
+      type: string
+      enum:
+      - PUBLISHER
+      - ACCEPTOR
+    RatingLevel:
+      type: string
+      enum:
+      - GOOD
+      - NEUTRAL
+      - BAD
+    PaymentStatus:
+      type: string
+      enum:
+      - WAITING_PAY
+      - PAID
+      - CLOSED
+      - REFUNDED
+      - SETTLED
