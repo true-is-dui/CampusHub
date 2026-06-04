@@ -32,7 +32,7 @@ classDiagram
 
     PickupRequest "0..1" --> "1" PaymentRecord : paymentId
     PickupRequest ..> StoredFile : 通过fileId引用凭证文件
-    Evaluation ..> PickupRequest : businessType=PICKUP,businessId
+    Evaluation ..> PickupRequest : businessType=PICKUP_REQUEST,businessId
     User "1" --> "*" Evaluation : 发出/收到
     User "1" --> "*" NotificationRecord : 接收
 
@@ -369,7 +369,7 @@ classDiagram
 | isPublisher(userId) | 判断用户是否为该代取服务发布方；供服务层内部校验使用 |
 | isAcceptor(userId) | 判断用户是否为该代取服务接单方；供服务层内部校验使用 |
 
-> 代取服务不保存评价 ID 列表。评价通过 `Evaluation.businessType + Evaluation.businessId` 查询，当前 MVP 中 `businessType` 固定为 `PICKUP`，`businessId` 对应代取服务 ID。MVP 阶段完成凭证限定为一张图片；后续若需要多张完成凭证，可扩展为完成凭证关联表，但本阶段不建模。
+> 代取服务不保存评价 ID 列表。评价通过 `Evaluation.businessType + Evaluation.businessId` 查询，当前 MVP 中 `businessType` 固定为 `PICKUP_REQUEST`，`businessId` 对应代取服务 ID。MVP 阶段完成凭证限定为一张图片；后续若需要多张完成凭证，可扩展为完成凭证关联表，但本阶段不建模。
 
 #### PickupSummary（代取服务摘要）
 
@@ -396,7 +396,7 @@ classDiagram
 | payerId | Long | 付款方，即代取发布方 |
 | receiverId | Long | 收款方，即接单方；结算前可为空 |
 | amount | BigDecimal | 支付金额 |
-| businessType | BusinessType(Enum) | 业务类型，当前 MVP 可为 `PICKUP` |
+| businessType | BusinessType(Enum) | 业务类型，当前 MVP 可为 `PICKUP_REQUEST` |
 | businessTraceNo | String | 业务追踪号，由代取服务模块生成并传入 |
 | outTradeNo | String | 平台生成的商户订单号 |
 | tradeNo | String | 支付宝沙箱交易号 |
@@ -436,7 +436,7 @@ classDiagram
 | id | Long | 评价主键 |
 | reviewerId | Long | 评价者 ID |
 | revieweeId | Long | 被评价者 ID |
-| businessType | BusinessType(Enum) | 评价所属业务类型，当前 MVP 固定为 `PICKUP` |
+| businessType | BusinessType(Enum) | 评价所属业务类型，当前 MVP 固定为 `PICKUP_REQUEST` |
 | businessId | Long | 业务对象 ID，当前 MVP 对应代取服务 ID |
 | revieweeRoleInBusiness | PickupParticipantRole(Enum) | 被评价者在该业务中的角色，当前 MVP 可取 `PUBLISHER` / `ACCEPTOR` |
 | ratingLevel | RatingLevel(Enum) | 好评/中评/差评 |
@@ -555,7 +555,7 @@ classDiagram
 | queryMyAccepted(userId, status, pageQuery) | 查询我的接单，支持总览和按状态分类，返回 `PickupSummary` 列表 |
 | queryPickupEvaluationContext(pickupId) | 向评价模块提供发布方、接单方和服务状态 |
 
-> 代取服务不保存评价 ID 列表。评价查询、评价统计、评价详情展示和重复评价校验均通过 `Evaluation.businessType + Evaluation.businessId` 定位业务对象；当前 MVP 中 `businessType=PICKUP`，`businessId` 为代取服务 ID。
+> 代取服务不保存评价 ID 列表。评价查询、评价统计、评价详情展示和重复评价校验均通过 `Evaluation.businessType + Evaluation.businessId` 定位业务对象；当前 MVP 中 `businessType=PICKUP_REQUEST`，`businessId` 为代取服务 ID。
 
 #### PaymentService（支付服务）
 
