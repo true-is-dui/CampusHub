@@ -7,6 +7,8 @@ info:
     校园互助服务平台 API 规范。本文档已同步 P1 v2.1、P2 v1.2 和 P3 类设计。
 
     当前 MVP 范围聚焦可信代取服务闭环：用户注册登录、实名认证、实名审核、代取大厅、代取发布/支付/接单/完成、我的代取记录、支付宝沙箱支付、业务模块内图片处理和评价能力。
+
+    字段校验口径：除特别说明外，字符串长度均按字符数计算，中文、英文、数字均按 1 个字符计；数据库字符集按 utf8mb4 考虑。该口径仅用于 API 字段约束说明，不改变业务流程。
 servers:
 - url: http://localhost:8080/api/v1
   description: 本地开发环境
@@ -520,7 +522,7 @@ paths:
                   pageSize: 1
                   list:
                   - pickupId: 1
-                    campus: string
+                    campus: XIANLIN
                     pickupLocation: string
                     deliveryLocation: string
                     itemDescriptionPreview: string
@@ -763,9 +765,14 @@ paths:
       - name: campus
         in: query
         required: false
-        description: 不传表示查询全部校区。
+        description: 不传表示查询全部校区。GULOU=鼓楼校区，XIANLIN=仙林校区，PUKOU=浦口校区，SUZHOU=苏州校区。
         schema:
           type: string
+          enum:
+          - GULOU
+          - XIANLIN
+          - PUKOU
+          - SUZHOU
       - name: rewardType
         in: query
         required: false
@@ -796,7 +803,7 @@ paths:
                   list:
                   - pickupId: 1
                     itemDescriptionPreview: string
-                    campus: string
+                    campus: XIANLIN
                     pickupLocation: string
                     deliveryLocation: string
                     rewardType: PAID
@@ -918,7 +925,7 @@ paths:
                 message: ok
                 data:
                   pickupId: 1
-                  campus: string
+                  campus: XIANLIN
                   pickupLocation: string
                   deliveryLocation: string
                   rewardType: PAID
@@ -2070,7 +2077,10 @@ components:
         password:
           type: string
           format: password
-          description: MVP阶段请求体直接传原始密码字段，不做前端加密；后端保存时必须进行加盐哈希，不保存明文。
+          description: MVP阶段请求体直接传原始密码字段，不做前端加密；后端保存时必须进行加盐哈希，不保存明文。8-32 位，至少包含字母和数字，允许字母、数字、下划线及常见符号 `_@#$%^&*.-`。
+          minLength: 8
+          maxLength: 32
+          pattern: "^(?=.*[A-Za-z])(?=.*\\d)[A-Za-z\\d_@#$%^&*.-]+$"
     LoginRequest:
       type: object
       required:
@@ -2080,10 +2090,16 @@ components:
         username:
           type: string
           description: 登录账号
+          minLength: 3
+          maxLength: 30
+          pattern: "^[A-Za-z0-9_]+$"
         password:
           type: string
           format: password
-          description: MVP阶段请求体直接传原始密码字段，不做前端加密；后端用该字段校验密码哈希。
+          description: MVP阶段请求体直接传原始密码字段，不做前端加密；后端用该字段校验密码哈希。8-32 位，至少包含字母和数字，允许字母、数字、下划线及常见符号 `_@#$%^&*.-`。
+          minLength: 8
+          maxLength: 32
+          pattern: "^(?=.*[A-Za-z])(?=.*\\d)[A-Za-z\\d_@#$%^&*.-]+$"
     LoginSession:
       type: object
       required:
@@ -2102,21 +2118,31 @@ components:
         username:
           type: string
           description: 登录账号，仅当前用户本人可见
+          minLength: 3
+          maxLength: 30
+          pattern: "^[A-Za-z0-9_]+$"
         studentIdMasked:
           type: string
           nullable: true
         realName:
           type: string
           nullable: true
+          minLength: 2
+          maxLength: 20
         nickname:
           type: string
           description: 公开展示昵称，可修改，可重复
+          minLength: 1
+          maxLength: 20
         college:
           type: string
           nullable: true
+          maxLength: 50
         contact:
           type: string
           nullable: true
+          description: 用户公开联系方式，可填写手机号、微信号、邮箱或其他联系方式。
+          maxLength: 100
         authStatus:
           "$ref": "#/components/schemas/AuthStatus"
         role:
@@ -2130,13 +2156,17 @@ components:
         nickname:
           type: string
           description: 公开展示昵称
+          minLength: 1
+          maxLength: 20
         college:
           type: string
           nullable: true
+          maxLength: 50
         contact:
           type: string
           nullable: true
           description: 用户公开联系方式，选填；未填写时为空或不展示。该字段属于用户主动填写的公开个人资料。
+          maxLength: 100
         ratingSummary:
           "$ref": "#/components/schemas/RatingSummary"
           nullable: true
@@ -2148,6 +2178,8 @@ components:
         nickname:
           type: string
           description: 公开展示昵称，可修改，可重复；不传表示不修改昵称
+          minLength: 1
+          maxLength: 20
         avatar:
           type: string
           format: binary
@@ -2156,9 +2188,12 @@ components:
         college:
           type: string
           nullable: true
+          maxLength: 50
         contact:
           type: string
           nullable: true
+          description: 可填写手机号、微信号、邮箱或其他联系方式；不传表示不修改联系方式。
+          maxLength: 100
     VerificationSubmitRequest:
       type: object
       required:
@@ -2168,14 +2203,20 @@ components:
       properties:
         studentId:
           type: string
+          minLength: 6
+          maxLength: 20
+          pattern: "^\\d+$"
         realName:
           type: string
+          minLength: 2
+          maxLength: 20
         verificationImage:
           type: string
           format: binary
           description: 一张实名认证材料照片，JPG/PNG，单张不超过5MB
     PickupCreateRequest:
       type: object
+      description: rewardType=PAID 时 rewardAmount 必填，范围 1-200；rewardType=UNPAID 时 rewardAmount 必须为空。
       required:
       - campus
       - pickupLocation
@@ -2187,12 +2228,24 @@ components:
       properties:
         campus:
           type: string
+          description: GULOU=鼓楼校区，XIANLIN=仙林校区，PUKOU=浦口校区，SUZHOU=苏州校区。
+          enum:
+          - GULOU
+          - XIANLIN
+          - PUKOU
+          - SUZHOU
         pickupLocation:
           type: string
+          minLength: 1
+          maxLength: 100
         deliveryLocation:
           type: string
+          minLength: 1
+          maxLength: 100
         itemDescription:
           type: string
+          minLength: 1
+          maxLength: 500
         pickupCredential:
           type: string
           format: binary
@@ -2205,9 +2258,11 @@ components:
           minimum: 1
           maximum: 200
           nullable: true
+          description: rewardType=PAID 时必填，范围 1-200；rewardType=UNPAID 时必须为空。
         acceptDeadline:
           type: string
           format: date-time
+          description: 接单截止时间，必须晚于当前时间，建议至少晚于当前时间 10 分钟。
     PickupCreateResult:
       type: object
       properties:
@@ -2253,12 +2308,23 @@ components:
           format: int64
         campus:
           type: string
+          description: GULOU=鼓楼校区，XIANLIN=仙林校区，PUKOU=浦口校区，SUZHOU=苏州校区。
+          enum:
+          - GULOU
+          - XIANLIN
+          - PUKOU
+          - SUZHOU
         pickupLocation:
           type: string
+          minLength: 1
+          maxLength: 100
         deliveryLocation:
           type: string
+          minLength: 1
+          maxLength: 100
         itemDescriptionPreview:
           type: string
+          maxLength: 500
         rewardType:
           "$ref": "#/components/schemas/RewardType"
         rewardAmount:
@@ -2276,6 +2342,7 @@ components:
         acceptDeadline:
           type: string
           format: date-time
+          description: 接单截止时间，必须晚于当前时间，建议至少晚于当前时间 10 分钟。
         createdAt:
           type: string
           format: date-time
@@ -2286,6 +2353,8 @@ components:
         properties:
           itemDescription:
             type: string
+            minLength: 1
+            maxLength: 500
           acceptor:
             "$ref": "#/components/schemas/UserSummary"
             nullable: true
@@ -2315,12 +2384,23 @@ components:
           format: int64
         campus:
           type: string
+          description: GULOU=鼓楼校区，XIANLIN=仙林校区，PUKOU=浦口校区，SUZHOU=苏州校区。
+          enum:
+          - GULOU
+          - XIANLIN
+          - PUKOU
+          - SUZHOU
         pickupLocation:
           type: string
+          minLength: 1
+          maxLength: 100
         deliveryLocation:
           type: string
+          minLength: 1
+          maxLength: 100
         itemDescriptionPreview:
           type: string
+          maxLength: 500
         rewardType:
           "$ref": "#/components/schemas/RewardType"
         rewardAmount:
@@ -2359,7 +2439,8 @@ components:
         content:
           type: string
           nullable: true
-          description: 差评必填。被评价人不由前端提交，后端根据 pickupId 和当前登录用户自动推导。
+          description: ratingLevel=BAD 时必填；ratingLevel=GOOD 或 NEUTRAL 时可为空。被评价人不由前端提交，后端根据 pickupId 和当前登录用户自动推导。
+          maxLength: 300
     EvaluationEligibility:
       type: object
       properties:
@@ -2536,6 +2617,8 @@ components:
         nickname:
           type: string
           description: 公开展示昵称
+          minLength: 1
+          maxLength: 20
         ratingSummary:
           "$ref": "#/components/schemas/RatingSummary"
           nullable: true
@@ -2558,6 +2641,7 @@ components:
         reason:
           type: string
           minLength: 1
+          maxLength: 200
     VerificationReviewSummary:
       type: object
       properties:
@@ -2569,14 +2653,21 @@ components:
           format: int64
         username:
           type: string
+          minLength: 3
+          maxLength: 30
+          pattern: "^[A-Za-z0-9_]+$"
         nickname:
           type: string
           nullable: true
+          minLength: 1
+          maxLength: 20
         studentIdMasked:
           type: string
           nullable: true
         realName:
           type: string
+          minLength: 2
+          maxLength: 20
         status:
           "$ref": "#/components/schemas/ReviewStatus"
         rejectReason:
@@ -2611,6 +2702,7 @@ components:
             "$ref": "#/components/schemas/VerificationReviewPage"
     AdminHandleRequest:
       type: object
+      description: result=REJECT 时 reason 必填；result=APPROVE 时 reason 可为空。
       required:
       - result
       properties:
@@ -2622,6 +2714,8 @@ components:
         reason:
           type: string
           nullable: true
+          maxLength: 200
+          description: result=REJECT 时必填；result=APPROVE 时可为空。
     ReviewStatus:
       type: string
       enum:
