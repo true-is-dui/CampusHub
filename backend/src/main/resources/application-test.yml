@@ -1,0 +1,39 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api/v1
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:campushub;MODE=MySQL;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema-h2.sql
+      data-locations:
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 10MB
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+
+jwt:
+  secret: CampHubJWTSecretKey2026ForSoftwareEngineeringCourseProjectPhase4
+  expiration: 86400000
+
+file:
+  upload-dir: ./uploads

@@ -1,0 +1,4 @@
+-- Initial admin user (password: admin123, BCrypt encoded)
+-- This will be auto-created by AdminConfig on startup
+-- INSERT INTO users (username, password_hash, nickname, auth_status, role)
+-- VALUES ('admin', '$2a$10$...hashed...', 'Admin', 'APPROVED', 'ADMIN');
