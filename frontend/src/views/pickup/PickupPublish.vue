@@ -148,6 +148,7 @@ const rules = {
   campus: [{ required: true, message: '请输入校区', trigger: 'blur' }],
   pickupLocation: [{ required: true, message: '请输入取件地点', trigger: 'blur' }],
   deliveryLocation: [{ required: true, message: '请输入送达地点', trigger: 'blur' }],
+  itemDescription: [{ required: true, message: '请输入物品描述', trigger: 'blur' }],
   rewardType: [{ required: true, message: '请选择报酬类型', trigger: 'change' }],
   rewardAmount: [{ validator: validateRewardAmount, trigger: 'change' }],
   acceptDeadline: [{ required: true, message: '请选择接单截止时间', trigger: 'change' }]
@@ -173,7 +174,7 @@ async function handleSubmit() {
   fd.append('campus', form.campus)
   fd.append('pickupLocation', form.pickupLocation)
   fd.append('deliveryLocation', form.deliveryLocation)
-  fd.append('itemDescription', form.itemDescription || '')
+  fd.append('itemDescription', form.itemDescription)
   fd.append('rewardType', form.rewardType)
   fd.append('acceptDeadline', form.acceptDeadline)
   if (form.rewardType === 'PAID') {

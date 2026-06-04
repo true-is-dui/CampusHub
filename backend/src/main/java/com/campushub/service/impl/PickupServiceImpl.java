@@ -6,9 +6,11 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.campushub.common.BusinessException;
 import com.campushub.dto.*;
 import com.campushub.entity.PickupRequest;
+import com.campushub.entity.PaymentRecord;
 import com.campushub.entity.User;
 import com.campushub.entity.enums.*;
 import com.campushub.mapper.PickupRequestMapper;
+import com.campushub.mapper.PaymentRecordMapper;
 import com.campushub.mapper.UserMapper;
 import com.campushub.service.FileStorageService;
 import com.campushub.service.PickupService;
@@ -27,9 +29,11 @@ import java.util.Map;
 public class PickupServiceImpl implements PickupService {
 
     private final PickupRequestMapper pickupRequestMapper;
+    private final PaymentRecordMapper paymentRecordMapper;
     private final UserMapper userMapper;
     private final PaymentServiceImpl paymentService;
     private final FileStorageService fileStorageService;
+    private final NotificationServiceImpl notificationService;
 
     private static final DateTimeFormatter DT_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -142,7 +146,10 @@ public class PickupServiceImpl implements PickupService {
 
         PickupPaymentResultDTO dto = new PickupPaymentResultDTO();
         dto.setPayEntry("/api/payments/mock-pay/" + pickup.getPaymentId());
-        dto.setExpireAt(pickup.getAcceptDeadline() != null ? pickup.getAcceptDeadline().format(DT_FMT) : null);
+        PaymentRecord payment = paymentRecordMapper.selectById(pickup.getPaymentId());
+        if (payment != null && payment.getExpireAt() != null) {
+            dto.setExpireAt(payment.getExpireAt().format(DT_FMT));
+        }
         return dto;
     }
 
@@ -155,6 +162,9 @@ public class PickupServiceImpl implements PickupService {
         if (pickup.getStatus() != PickupStatus.WAITING_ACCEPT) {
             throw new BusinessException(40001, "该代拿请求当前不可接单");
         }
+        if (pickup.getAcceptDeadline() != null && pickup.getAcceptDeadline().isBefore(LocalDateTime.now())) {
+            throw new BusinessException(40003, "该代取请求已过接单截止时间");
+        }
         if (pickup.getPublisherId().equals(acceptorId)) {
             throw new BusinessException(40002, "不能接受自己发布的代拿请求");
         }
@@ -163,6 +173,15 @@ public class PickupServiceImpl implements PickupService {
         pickup.setStatus(PickupStatus.IN_PROGRESS);
         pickup.setAcceptedAt(LocalDateTime.now());
         pickupRequestMapper.updateById(pickup);
+
+        notificationService.createNotice(
+                pickup.getPublisherId(),
+                NotificationType.PICKUP,
+                "代取请求已被接单",
+                "您发布的代取请求（" + pickup.getPickupLocation() + " → " + pickup.getDeliveryLocation() + "）已被接单。",
+                BusinessType.PICKUP_REQUEST,
+                pickup.getId()
+        );
 
         PickupAcceptResultDTO result = new PickupAcceptResultDTO();
         result.setStatus(pickup.getStatus().name());
@@ -203,6 +222,15 @@ public class PickupServiceImpl implements PickupService {
             paymentService.settlePayment(pickup.getPaymentId(), pickup.getAcceptorId());
         }
 
+        notificationService.createNotice(
+                pickup.getAcceptorId(),
+                NotificationType.PICKUP,
+                "代取请求已确认完成",
+                "您接取的代取请求（" + pickup.getPickupLocation() + " → " + pickup.getDeliveryLocation() + "）已被发布者确认完成。",
+                BusinessType.PICKUP_REQUEST,
+                pickup.getId()
+        );
+
         return Map.of("status", "COMPLETED");
     }
 
@@ -234,6 +262,17 @@ public class PickupServiceImpl implements PickupService {
             pickup.setCancelReason(PickupCancelReason.USER_CANCELLED);
         }
         pickupRequestMapper.updateById(pickup);
+
+        if (pickup.getAcceptorId() != null) {
+            notificationService.createNotice(
+                    pickup.getAcceptorId(),
+                    NotificationType.PICKUP,
+                    "代取请求已取消",
+                    "您接取的代取请求（" + pickup.getPickupLocation() + " → " + pickup.getDeliveryLocation() + "）已被发布者取消。",
+                    BusinessType.PICKUP_REQUEST,
+                    pickup.getId()
+            );
+        }
 
         return Map.of("status", "CANCELLED");
     }
@@ -339,6 +378,12 @@ public class PickupServiceImpl implements PickupService {
         dto.setStatus(pickup.getStatus() != null ? pickup.getStatus().name() : null);
         dto.setCancelReason(pickup.getCancelReason() != null ? pickup.getCancelReason().name() : null);
         dto.setAcceptDeadline(pickup.getAcceptDeadline() != null ? pickup.getAcceptDeadline().format(DT_FMT) : null);
+        if (pickup.getPaymentId() != null && pickup.getStatus() == PickupStatus.WAITING_PAYMENT) {
+            PaymentRecord payment = paymentRecordMapper.selectById(pickup.getPaymentId());
+            if (payment != null && payment.getExpireAt() != null) {
+                dto.setPaymentExpireAt(payment.getExpireAt().format(DT_FMT));
+            }
+        }
         dto.setCreatedAt(pickup.getCreatedAt() != null ? pickup.getCreatedAt().format(DT_FMT) : null);
         dto.setCompletedAt(pickup.getCompletedAt() != null ? pickup.getCompletedAt().format(DT_FMT) : null);
 

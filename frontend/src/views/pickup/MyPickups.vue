@@ -33,9 +33,14 @@
       >
         <div class="card-header">
           <span class="card-title">{{ item.campus }} - {{ item.pickupLocation }}</span>
-          <el-tag :type="getTagType(item.status)" size="small">
-            {{ getStatusLabel(item.status) }}
-          </el-tag>
+          <div class="header-right-tags">
+            <el-tag :type="getTagType(item.status)" size="small">
+              {{ getStatusLabel(item.status) }}
+            </el-tag>
+            <span v-if="item.status === 'WAITING_PAYMENT' && countdowns[item.pickupId]" class="card-countdown">
+              {{ countdowns[item.pickupId] }}
+            </span>
+          </div>
         </div>
         <div class="card-body">
           <div class="info-row">
@@ -46,6 +51,27 @@
             <span v-else class="reward-free">无报酬</span>
             <span class="time">{{ formatTime(item.createdAt) }}</span>
           </div>
+        </div>
+        <div
+          v-if="activeTab === 'PUBLISHER' && (item.status === 'WAITING_PAYMENT' || item.status === 'WAITING_ACCEPT')"
+          class="card-actions"
+          @click.stop
+        >
+          <el-button
+            v-if="item.status === 'WAITING_PAYMENT'"
+            type="primary"
+            size="small"
+            @click.stop="handlePay(item)"
+          >
+            继续支付
+          </el-button>
+          <el-button
+            type="danger"
+            size="small"
+            @click.stop="handleCancel(item)"
+          >
+            取消订单
+          </el-button>
         </div>
       </el-card>
     </div>
@@ -65,15 +91,59 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getMyPickups } from '@/api/pickup'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { getMyPickups, cancelPickup, getPaymentEntry } from '@/api/pickup'
 
 const router = useRouter()
 const loading = ref(false)
 const activeTab = ref('PUBLISHER')
 const statusFilter = ref('')
 const list = ref([])
+const countdowns = reactive({})
+let countdownTimer = null
+
+function startCountdowns() {
+  stopCountdowns()
+  const now = Date.now()
+  list.value.forEach(item => {
+    if (item.status === 'WAITING_PAYMENT' && item.paymentExpireAt) {
+      const expireAt = new Date(item.paymentExpireAt.replace(' ', 'T')).getTime()
+      const remaining = Math.max(0, Math.floor((expireAt - now) / 1000))
+      if (remaining > 0) {
+        const m = String(Math.floor(remaining / 60)).padStart(2, '0')
+        const s = String(remaining % 60).padStart(2, '0')
+        countdowns[item.pickupId] = `${m}:${s}`
+      } else {
+        countdowns[item.pickupId] = '已过期'
+      }
+    }
+  })
+  countdownTimer = setInterval(() => {
+    const now = Date.now()
+    list.value.forEach(item => {
+      if (item.status === 'WAITING_PAYMENT' && item.paymentExpireAt) {
+        const expireAt = new Date(item.paymentExpireAt.replace(' ', 'T')).getTime()
+        const remaining = Math.max(0, Math.floor((expireAt - now) / 1000))
+        if (remaining > 0) {
+          const m = String(Math.floor(remaining / 60)).padStart(2, '0')
+          const s = String(remaining % 60).padStart(2, '0')
+          countdowns[item.pickupId] = `${m}:${s}`
+        } else {
+          countdowns[item.pickupId] = '已过期'
+        }
+      }
+    })
+  }, 1000)
+}
+
+function stopCountdowns() {
+  if (countdownTimer) {
+    clearInterval(countdownTimer)
+    countdownTimer = null
+  }
+}
 
 const pagination = reactive({
   page: 1,
@@ -129,6 +199,7 @@ async function loadList() {
     const res = await getMyPickups(params)
     list.value = res.data?.list || []
     pagination.total = res.data?.total || 0
+    startCountdowns()
   } catch {
     // error handled by interceptor
   } finally {
@@ -140,8 +211,42 @@ function goDetail(id) {
   router.push(`/pickup/${id}`)
 }
 
+async function handlePay(item) {
+  try {
+    const res = await getPaymentEntry(item.pickupId)
+    const url = res.data?.payEntry || res.data?.payUrl || res.data
+    if (url) {
+      window.location.href = url
+    }
+  } catch {
+    // error handled by interceptor
+  }
+}
+
+async function handleCancel(item) {
+  try {
+    const { value: reason } = await ElMessageBox.prompt('请输入取消原因（可选）', '取消订单', {
+      confirmButtonText: '确定取消',
+      cancelButtonText: '返回',
+      inputPlaceholder: '取消原因',
+      type: 'warning'
+    })
+    await cancelPickup(item.pickupId, { reason: reason || '' })
+    ElMessage.success('订单已取消')
+    loadList()
+  } catch (e) {
+    if (e !== 'cancel' && e?.action !== 'cancel') {
+      // error handled by interceptor
+    }
+  }
+}
+
 onMounted(() => {
   loadList()
+})
+
+onUnmounted(() => {
+  stopCountdowns()
 })
 </script>
 
@@ -184,6 +289,19 @@ onMounted(() => {
   color: #303133;
 }
 
+.header-right-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-countdown {
+  font-size: 13px;
+  font-weight: bold;
+  color: #e6a23c;
+  font-family: monospace;
+}
+
 .card-body {
   font-size: 14px;
   color: #606266;
@@ -208,6 +326,15 @@ onMounted(() => {
 .time {
   color: #909399;
   font-size: 13px;
+}
+
+.card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #ebeef5;
 }
 
 .pagination-wrapper {

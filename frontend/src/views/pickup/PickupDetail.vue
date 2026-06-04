@@ -12,6 +12,9 @@
           <el-tag :type="statusTagType" size="large">{{ statusLabel }}</el-tag>
           <span v-if="detail.rewardType === 'PAID'" class="reward">¥{{ detail.rewardAmount }}</span>
         </div>
+        <div v-if="detail.status === 'WAITING_PAYMENT' && countdownText" class="countdown-bar">
+          支付剩余时间：<span class="countdown" :class="{ 'countdown-expired': countdownText === '已过期' }">{{ countdownText }}</span>
+        </div>
 
         <el-descriptions :column="2" border class="detail-info">
           <el-descriptions-item label="校区">{{ detail.campus }}</el-descriptions-item>
@@ -166,7 +169,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/store/user'
@@ -196,6 +199,34 @@ const evaluation = ref(null)
 const canEvaluate = ref(false)
 const evalForm = reactive({ ratingLevel: 'GOOD', content: '' })
 const proofUploadRef = ref(null)
+const countdownText = ref('')
+let countdownTimer = null
+
+function startCountdown(expireAtStr) {
+  stopCountdown()
+  if (!expireAtStr) return
+  const expireAt = new Date(expireAtStr.replace(' ', 'T')).getTime()
+  function tick() {
+    const remaining = Math.max(0, Math.floor((expireAt - Date.now()) / 1000))
+    if (remaining <= 0) {
+      countdownText.value = '已过期'
+      stopCountdown()
+      return
+    }
+    const m = String(Math.floor(remaining / 60)).padStart(2, '0')
+    const s = String(remaining % 60).padStart(2, '0')
+    countdownText.value = `${m}:${s}`
+  }
+  tick()
+  countdownTimer = setInterval(tick, 1000)
+}
+
+function stopCountdown() {
+  if (countdownTimer) {
+    clearInterval(countdownTimer)
+    countdownTimer = null
+  }
+}
 
 const statusMap = {
   WAITING_PAYMENT: '待支付',
@@ -219,11 +250,11 @@ const statusTagType = computed(() => {
 const statusLabel = computed(() => statusMap[detail.value?.status] || detail.value?.status)
 
 const isPublisher = computed(() => {
-  return userStore.userInfo && detail.value && userStore.userInfo.id === detail.value.publisher?.userId
+  return userStore.userInfo && detail.value && userStore.userInfo.userId === detail.value.publisher?.userId
 })
 
 const isAcceptor = computed(() => {
-  return userStore.userInfo && detail.value && userStore.userInfo.id === detail.value.acceptor?.userId
+  return userStore.userInfo && detail.value && userStore.userInfo.userId === detail.value.acceptor?.userId
 })
 
 const credentialUrl = computed(() => {
@@ -259,6 +290,9 @@ async function loadDetail() {
   try {
     const res = await getPickupDetail(route.params.id)
     detail.value = res.data
+    if (detail.value.status === 'WAITING_PAYMENT' && detail.value.paymentExpireAt) {
+      startCountdown(detail.value.paymentExpireAt)
+    }
     // Check evaluation eligibility if completed
     if (detail.value.status === 'COMPLETED' && userStore.isLoggedIn()) {
       try {
@@ -386,6 +420,10 @@ async function submitEval() {
 onMounted(() => {
   loadDetail()
 })
+
+onUnmounted(() => {
+  stopCountdown()
+})
 </script>
 
 <style scoped>
@@ -409,6 +447,26 @@ onMounted(() => {
   font-size: 24px;
   font-weight: bold;
   color: #e6a23c;
+}
+
+.countdown-bar {
+  background: #fdf6ec;
+  border: 1px solid #faecd8;
+  border-radius: 4px;
+  padding: 8px 16px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: #e6a23c;
+}
+
+.countdown {
+  font-weight: bold;
+  font-size: 18px;
+  font-family: monospace;
+}
+
+.countdown-expired {
+  color: #f56c6c;
 }
 
 .detail-info {

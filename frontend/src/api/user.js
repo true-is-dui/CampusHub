@@ -1,12 +1,8 @@
 import request from './request'
 
 export const getMe = () => request.get('/users/me')
-export const updateProfile = (formData) => request.put('/users/me/profile', formData, {
-  headers: { 'Content-Type': 'multipart/form-data' }
-})
-export const submitVerification = (formData) => request.post('/users/me/verification', formData, {
-  headers: { 'Content-Type': 'multipart/form-data' }
-})
+export const updateProfile = (formData) => request.put('/users/me', formData)
+export const submitVerification = (formData) => request.post('/users/me/verification', formData)
 export const getUserProfile = (userId, includeRating = false) =>
   request.get(`/users/${userId}/profile`, { params: { includeRating } })
 export const getUserAvatar = (userId) => `/api/v1/users/${userId}/avatar`

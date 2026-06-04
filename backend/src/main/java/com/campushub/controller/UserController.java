@@ -35,7 +35,7 @@ public class UserController {
         return ApiResponse.ok(userService.getCurrentUser(ctx.getCurrentUserId()));
     }
 
-    @PutMapping("/me/profile")
+    @PutMapping("/me")
     public ApiResponse<Void> updateProfile(
             HttpServletRequest request,
             @RequestParam(value = "nickname", required = false) String nickname,
@@ -46,11 +46,7 @@ public class UserController {
         CurrentUserContext ctx = (CurrentUserContext) request.getAttribute(AuthInterceptor.CONTEXT_KEY);
         if (avatar != null && !avatar.isEmpty()) {
             Long avatarFileId = fileStorageService.uploadImage(avatar, ctx.getCurrentUserId(), FileUsage.AVATAR);
-            // Update avatar file id separately
-            com.campushub.entity.User user = new com.campushub.entity.User();
-            user.setId(ctx.getCurrentUserId());
-            user.setAvatarFileId(avatarFileId);
-            // Note: avatar update handled via direct entity update
+            userService.updateAvatarFileId(ctx.getCurrentUserId(), avatarFileId);
         }
         UpdateProfileRequest req = new UpdateProfileRequest();
         req.setNickname(nickname);

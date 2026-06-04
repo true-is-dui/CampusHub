@@ -18,6 +18,7 @@ public class PickupSummaryDTO {
     private String cancelReason;
     private Object publisher;
     private String acceptDeadline;
+    private String paymentExpireAt;
     private String createdAt;
     private String completedAt;
 }

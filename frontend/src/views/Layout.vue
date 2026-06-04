@@ -60,7 +60,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { getUnreadCount } from '@/api/notification'
@@ -74,8 +74,8 @@ const unreadCount = ref(0)
 const activeMenu = computed(() => route.path)
 
 const avatarSrc = computed(() => {
-  if (userStore.userInfo?.id) {
-    return getUserAvatar(userStore.userInfo.id)
+  if (userStore.userInfo?.userId) {
+    return getUserAvatar(userStore.userInfo.userId)
   }
   return ''
 })
@@ -101,8 +101,15 @@ function handleCommand(command) {
   }
 }
 
+let pollTimer = null
+
 onMounted(() => {
   fetchUnreadCount()
+  pollTimer = setInterval(fetchUnreadCount, 30000)
+})
+
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer)
 })
 </script>
 

@@ -13,4 +13,5 @@ public interface UserService {
     void updateProfile(Long userId, UpdateProfileRequest request);
     String getAvatarMimeType(Long userId);
     void submitVerification(Long userId, String studentId, String realName, Long verificationFileId);
+    void updateAvatarFileId(Long userId, Long avatarFileId);
 }

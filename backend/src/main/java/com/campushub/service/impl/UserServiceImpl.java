@@ -113,6 +113,15 @@ public class UserServiceImpl implements UserService {
         verificationReviewMapper.insert(review);
     }
 
+    public void updateAvatarFileId(Long userId, Long avatarFileId) {
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(40401, "用户不存在");
+        }
+        user.setAvatarFileId(avatarFileId);
+        userMapper.updateById(user);
+    }
+
     private String maskStudentId(String studentId) {
         if (studentId == null || studentId.isEmpty()) {
             return null;

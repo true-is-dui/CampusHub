@@ -6,6 +6,7 @@ import com.campushub.entity.enums.FileUsage;
 import com.campushub.service.FileStorageService;
 import com.campushub.mapper.StoredFileMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -18,6 +19,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class FileStorageServiceImpl implements FileStorageService {
@@ -48,17 +50,19 @@ public class FileStorageServiceImpl implements FileStorageService {
         String storedName = UUID.randomUUID().toString().replace("-", "") + "." + ext;
 
         String usageDir = fileUsage.name().toLowerCase();
-        Path targetDir = Paths.get(uploadDir, usageDir);
+        Path targetDir = Paths.get(uploadDir, usageDir).toAbsolutePath().normalize();
         try {
             Files.createDirectories(targetDir);
         } catch (IOException e) {
+            log.error("创建上传目录失败: {}", targetDir, e);
             throw new BusinessException(50001, "创建上传目录失败");
         }
 
         Path targetPath = targetDir.resolve(storedName);
         try {
-            file.transferTo(targetPath.toFile());
+            file.transferTo(targetPath);
         } catch (IOException e) {
+            log.error("保存文件失败: {}", targetPath, e);
             throw new BusinessException(50002, "保存文件失败");
         }
 

@@ -100,8 +100,8 @@ const avatarFile = ref(null)
 const userInfo = computed(() => userStore.userInfo)
 
 const avatarSrc = computed(() => {
-  if (userInfo.value?.id) {
-    return getUserAvatar(userInfo.value.id)
+  if (userInfo.value?.userId) {
+    return getUserAvatar(userInfo.value.userId)
   }
   return ''
 })
