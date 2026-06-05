@@ -9,6 +9,11 @@ Thumbs.db
 .vscode/
 *.iml
 
+### Claude Code 本地工具配置与个人指南（不提交）###
+.claude/
+CLAUDE.md
+**/CLAUDE.md
+
 .env
 .env.*
 !.env.example

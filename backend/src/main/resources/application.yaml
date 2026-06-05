@@ -1,0 +1,43 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: campushub
+
+  # 可选导入本机私有配置（存在则加载，不存在不报错）。
+  # application-local.yaml 被 .gitignore 忽略，用于本机覆盖数据库等敏感配置。
+  config:
+    import: optional:classpath:application-local.yaml
+
+  # 数据库连接：值通过占位符外部化，仓库内不含真实密码。
+  # 查找顺序：环境变量 > application-local.yaml 覆盖 > 冒号后默认值。
+  #   开发：在 application-local.yaml 中提供（该文件被 .gitignore 忽略）
+  #   生产：通过环境变量 / docker-compose 注入 DB_URL、DB_USERNAME、DB_PASSWORD
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL:jdbc:mysql://localhost:3306/campushub?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 20MB
+
+mybatis-plus:
+  # 预留手写 XML 的位置；当前 MVP 主要用 BaseMapper，暂无 XML
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.campushub.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+
+logging:
+  level:
+    com.campushub: debug
