@@ -132,9 +132,9 @@ public class PickupRequest {
         this.cancelledAt = LocalDateTime.now();
     }
 
-    /** 仅接单方在接单成功后可查看取件凭证 */
+    /** 取件凭证可见方：发布方（凭证上传者）或接单成功后的接单方；其余人不可见 */
     public boolean canViewPickupCredential(Long userId) {
-        return isAcceptor(userId) && this.acceptorId != null;
+        return isPublisher(userId) || isAcceptor(userId);
     }
 
     /** 仅待接单状态可进入代取需求大厅 */

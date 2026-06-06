@@ -75,17 +75,21 @@ public class User {
     // ---------------- 领域方法（仅供 Service 层内部调用） ----------------
 
     /**
-     * 提交实名认证：保存实名信息和认证材料，进入审核中。
-     * 实名材料文件由 verification_reviews 维护，本表只保存当前有效实名信息。
+     * 提交实名认证：仅将认证状态置为审核中。
+     * 当次提交的学号、姓名快照和材料文件由 verification_reviews 保存；
+     * users 表的 student_id/real_name 表示当前有效实名信息，审核通过后才同步，
+     * 提交阶段不写入（避免审核中提前占用 uk_users_student_id 唯一约束）。
      */
-    public void markAuthSubmitted(String studentId, String realName) {
-        this.studentId = studentId;
-        this.realName = realName;
+    public void markAuthSubmitted() {
         this.authStatus = AuthStatus.REVIEWING;
     }
 
-    /** 实名认证通过 */
-    public void markAuthApproved() {
+    /**
+     * 实名认证通过：由 Service 从审核快照取通过的学号、姓名同步为当前有效实名信息。
+     */
+    public void markAuthApproved(String studentId, String realName) {
+        this.studentId = studentId;
+        this.realName = realName;
         this.authStatus = AuthStatus.APPROVED;
     }
 
