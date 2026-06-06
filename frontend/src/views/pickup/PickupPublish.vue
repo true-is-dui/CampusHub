@@ -70,7 +70,7 @@
               type="datetime"
               placeholder="请选择接单截止时间（必须晚于当前时间）"
               format="YYYY-MM-DD HH:mm"
-              value-format="YYYY-MM-DD HH:mm:ss"
+              value-format="YYYY-MM-DDTHH:mm:ss"
               :disabled-date="disabledDate"
               :disabled-hours="disabledHours"
               :disabled-minutes="disabledMinutes"

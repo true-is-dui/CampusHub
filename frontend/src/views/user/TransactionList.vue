@@ -22,7 +22,7 @@
       </el-select>
     </div>
 
-    <el-table v-loading="loading" :data="list" border stripe style="width: 100%">
+    <el-table v-loading="loading" :data="list" border stripe style="width: 100%" @row-click="goDetail">
       <el-table-column prop="paymentId" label="ID" width="80" />
       <!-- [新增] 交易类型列 -->
       <el-table-column label="交易类型" width="100">
@@ -66,7 +66,10 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { getTransactions } from '@/api/payment'
+
+const router = useRouter()
 
 const loading = ref(false)
 const typeFilter = ref('')  // [修改] 存储 PAYMENT/SETTLEMENT/REFUND 或 ''
@@ -153,6 +156,12 @@ async function loadList() {
 onMounted(() => {
   loadList()
 })
+
+function goDetail(row) {
+  if (row?.paymentId) {
+    router.push(`/payment/${row.paymentId}`)
+  }
+}
 </script>
 
 <style scoped>
@@ -168,6 +177,10 @@ onMounted(() => {
 .amount {
   font-weight: 500;
   color: #303133;
+}
+
+:deep(.el-table__row) {
+  cursor: pointer;
 }
 
 .pagination-wrapper {

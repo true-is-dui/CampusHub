@@ -55,6 +55,16 @@
           {{ formatTime(row.createdAt) }}
         </template>
       </el-table-column>
+      <el-table-column prop="reviewedAt" label="审核时间" width="170">
+        <template #default="{ row }">
+          {{ formatTime(row.reviewedAt) }}
+        </template>
+      </el-table-column>
+      <el-table-column prop="reviewerId" label="审核人ID" width="100">
+        <template #default="{ row }">
+          {{ row.reviewerId || '-' }}
+        </template>
+      </el-table-column>
       <el-table-column label="操作" width="200" fixed="right">
         <template #default="{ row }">
           <template v-if="row.status === 'PENDING'">

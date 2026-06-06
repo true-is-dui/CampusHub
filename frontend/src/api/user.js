@@ -2,13 +2,11 @@ import request from './request'
 
 export const getMe = () => request.get('/users/me')
 
-export const updateProfile = (formData) => request.put('/users/me/profile', formData, {
-  headers: { 'Content-Type': 'multipart/form-data' }
-})
+// [修复] 删除手动 Content-Type，交由 axios 自动处理（自动添加 boundary 参数）
+export const updateProfile = (formData) => request.put('/users/me/profile', formData)
 
-export const submitVerification = (formData) => request.post('/users/me/verification', formData, {
-  headers: { 'Content-Type': 'multipart/form-data' }
-})
+// [修复] 删除手动 Content-Type，交由 axios 自动处理（自动添加 boundary 参数）
+export const submitVerification = (formData) => request.post('/users/me/verification', formData)
 
 export const getUserProfile = (userId, includeRating = false) =>
     request.get(`/users/${userId}/profile`, { params: { includeRating } })

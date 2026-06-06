@@ -33,13 +33,18 @@ request.interceptors.response.use(
     },
     error => {
       // 处理由上方 Promise.reject(res) 抛出的业务错误对象
-      if (error.code && error.message) {
-        const { code, message } = error
+      if (typeof error.code === 'number' && error.message) {
+        const { code, message, errors } = error
         // 按错误码分类处理
         switch (code) {
-          case 40001:
-            ElMessage.error(message || '参数校验失败')
+          case 40001: {
+            // 提取结构化字段错误，如 { role: "role 必填", rewardType: "..." }
+            const detail = errors
+                ? Object.entries(errors).map(([k, v]) => `${k}: ${v}`).join('；')
+                : (message || '参数校验失败')
+            ElMessage.error(detail)
             break
+          }
           case 40101:
             localStorage.removeItem('token')
             router.push('/login')
@@ -105,7 +110,7 @@ function handleHttpError(code, message) {
     ElMessage.error(message || '无权限操作')
   } else if (code === 40401 || code === 404) {
     ElMessage.error(message || '资源不存在')
-  } else if (code === 40901) {
+  } else if (code === 40901 || code === 409) {
     ElMessage.error(message || '操作冲突')
   } else if (code === 50001 || code === 500) {
     ElMessage.error('服务器内部错误')

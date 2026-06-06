@@ -85,7 +85,7 @@ const user = ref(null)
 const ratingSummary = ref(null)
 const evaluations = ref([])
 const evalPage = ref(1)
-const evalPageSize = 10
+const evalPageSize = 20
 const evalTotal = ref(0)
 
 // [新增] 头像 Object URL

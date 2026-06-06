@@ -42,10 +42,6 @@
             <el-tag :type="item.rewardType === 'PAID' ? 'success' : 'info'" size="small">
               {{ item.rewardType === 'PAID' ? '有报酬' : '无报酬' }}
             </el-tag>
-            <!-- 显示服务状态标签 -->
-            <el-tag v-if="item.status" type="warning" size="small" class="status-tag">
-              {{ statusLabel(item.status) }}
-            </el-tag>
           </div>
           <span v-if="item.rewardType === 'PAID' && item.rewardAmount" class="reward-amount">
             ¥{{ item.rewardAmount }}
@@ -110,7 +106,7 @@ const filters = reactive({
 
 const pagination = reactive({
   page: 1,
-  pageSize: 10,
+  pageSize: 20,
   total: 0
 })
 
@@ -121,15 +117,6 @@ const campusMap = {
   PUKOU: '浦口校区'
 }
 const campusLabel = (code) => campusMap[code] || code
-
-const statusMap = {
-  WAITING_PAYMENT: '待支付',
-  WAITING_ACCEPT: '待接单',
-  IN_PROGRESS: '进行中',
-  COMPLETED: '已完成',
-  CANCELLED: '已取消'
-}
-const statusLabel = (status) => statusMap[status] || status
 
 function formatTime(dateStr) {
   if (!dateStr) return ''
@@ -219,10 +206,6 @@ onMounted(() => {
   display: flex;
   gap: 8px;
   align-items: center;
-}
-
-.status-tag {
-  margin-left: 0;
 }
 
 .reward-amount {

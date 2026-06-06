@@ -126,15 +126,15 @@ async function handleRead(item) {
     }
   }
 
-  // [新增] 根据业务类型和通知类型跳转到关联页面
-  if (item.businessType === 'PICKUP_REQUEST' && item.businessId) {
-    router.push(`/pickup/${item.businessId}`)
+  // 根据通知类型跳转到关联页面（先检查具体类型，再检查通用 businessType）
+  if (item.type === 'EVALUATION' && item.businessId) {
+    router.push(`/evaluation/${item.businessId}`)
   } else if (item.type === 'VERIFICATION') {
     router.push('/verification')
-  } else if (item.type === 'EVALUATION' && item.businessId) {
-    router.push(`/evaluation/${item.businessId}`)
   } else if (item.type === 'PAYMENT' && item.businessId) {
     router.push('/transactions')
+  } else if (item.businessType === 'PICKUP_REQUEST' && item.businessId) {
+    router.push(`/pickup/${item.businessId}`)
   }
   // SYSTEM 类型或其他未知类型不跳转，仅展示信息
 }

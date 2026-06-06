@@ -150,7 +150,7 @@
           </template>
 
           <!-- Acceptor + IN_PROGRESS -->
-          <template v-if="isAcceptor && detail.status === 'IN_PROGRESS' && !detail.completionProofFileId">
+          <template v-if="isAcceptor && detail.status === 'IN_PROGRESS' && !completionProofUrl">
             <el-upload
                 ref="proofUploadRef"
                 :auto-upload="false"
@@ -171,7 +171,7 @@
           </template>
 
           <!-- Publisher + IN_PROGRESS + proof uploaded -->
-          <template v-if="isPublisher && detail.status === 'IN_PROGRESS' && detail.completionProofFileId">
+          <template v-if="isPublisher && detail.status === 'IN_PROGRESS' && completionProofUrl">
             <el-button type="success" :loading="actionLoading" @click="handleConfirm">
               确认完成
             </el-button>
@@ -261,11 +261,11 @@ const statusTagType = computed(() => {
 const statusLabel = computed(() => statusMap[detail.value?.status] || detail.value?.status)
 
 const isPublisher = computed(() => {
-  return userStore.userInfo?.id && detail.value && userStore.userInfo.id === detail.value.publisher?.userId
+  return userStore.userInfo?.userId && detail.value && userStore.userInfo.userId === detail.value.publisher?.userId
 })
 
 const isAcceptor = computed(() => {
-  return userStore.userInfo?.id && detail.value && userStore.userInfo.id === detail.value.acceptor?.userId
+  return userStore.userInfo?.userId && detail.value && userStore.userInfo.userId === detail.value.acceptor?.userId
 })
 
 function goUserPublicProfile(userId) {
@@ -333,7 +333,7 @@ async function loadDetail() {
     const res = await getPickupDetail(route.params.id)
     detail.value = res
 
-    const currentUserId = userStore.userInfo?.id
+    const currentUserId = userStore.userInfo?.userId
     const isParticipant = currentUserId && (
         currentUserId === detail.value.publisher?.userId ||
         currentUserId === detail.value.acceptor?.userId
@@ -478,8 +478,12 @@ async function handleCancel() {
       }
     })
     actionLoading.value = true
-    await cancelPickup(detail.value.pickupId, { reason: reason?.trim() })
-    ElMessage.success('订单已取消')
+    const res = await cancelPickup(detail.value.pickupId, { reason: reason?.trim() })
+    if (res?.paymentStatus === 'REFUNDED') {
+      ElMessage.success('订单已取消，退款已发起')
+    } else {
+      ElMessage.success('订单已取消')
+    }
     loadDetail()
   } catch (e) {
     if (e !== 'cancel' && e?.action !== 'cancel') {

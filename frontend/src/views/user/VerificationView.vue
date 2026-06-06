@@ -227,9 +227,6 @@ onMounted(async () => {
   if (!userStore.userInfo) {
     await userStore.fetchUserInfo()
   }
-  if (userStore.userInfo?.studentId) {
-    form.studentId = userStore.userInfo.studentId
-  }
 })
 </script>
 
