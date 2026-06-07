@@ -16,3 +16,7 @@ spring:
 # 自行生成一串足够长的随机字符串填入，切勿提交真实值。
 jwt:
   secret: 在此填入至少32字节的随机密钥
+
+file:
+  storage:
+    root: uploads

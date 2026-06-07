@@ -3,6 +3,7 @@ package com.campushub.service.impl;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.campushub.common.BusinessException;
 import com.campushub.common.ErrorCode;
+import com.campushub.common.ErrorReason;
 import com.campushub.dto.user.LoginSession;
 import com.campushub.entity.User;
 import com.campushub.entity.enums.AuthStatus;
@@ -15,8 +16,6 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Map;
 
 /**
  * {@link AuthService} 实现：注册与登录。
@@ -47,8 +46,8 @@ public class AuthServiceImpl implements AuthService {
         Long existing = userMapper.selectCount(
                 Wrappers.<User>lambdaQuery().eq(User::getUsername, username));
         if (existing != null && existing > 0) {
-            throw new BusinessException(ErrorCode.CONFLICT, "用户名已被占用",
-                    Map.of("reason", "USERNAME_ALREADY_EXISTS"));
+            throw new BusinessException(ErrorCode.CONFLICT,
+                    ErrorReason.DUPLICATE_OR_CONFLICTED_OPERATION, "用户名已被占用");
         }
 
         User user = new User();
@@ -63,8 +62,8 @@ public class AuthServiceImpl implements AuthService {
             userMapper.insert(user);
         } catch (DuplicateKeyException e) {
             // 并发兜底：预检与插入之间另一个请求抢先插入了同名用户
-            throw new BusinessException(ErrorCode.CONFLICT, "用户名已被占用",
-                    Map.of("reason", "USERNAME_ALREADY_EXISTS"));
+            throw new BusinessException(ErrorCode.CONFLICT,
+                    ErrorReason.DUPLICATE_OR_CONFLICTED_OPERATION, "用户名已被占用");
         }
     }
 
@@ -74,8 +73,7 @@ public class AuthServiceImpl implements AuthService {
                 Wrappers.<User>lambdaQuery().eq(User::getUsername, username));
         // 用户不存在与密码错误返回一致的错误，避免账号枚举
         if (user == null || !passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
-            throw new BusinessException(ErrorCode.UNAUTHENTICATED, "用户名或密码错误",
-                    Map.of("reason", "INVALID_CREDENTIALS"));
+            throw new BusinessException(ErrorCode.UNAUTHENTICATED, ErrorReason.INVALID_CREDENTIALS);
         }
         String token = jwtUtil.generateToken(user.getId(), user.getRole(), user.getAuthStatus());
         return new LoginSession(token);

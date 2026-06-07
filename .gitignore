@@ -37,6 +37,7 @@ yarn-debug.log*
 yarn-error.log*
 
 backend/target/
+backend/uploads/
 target/
 
 *.class

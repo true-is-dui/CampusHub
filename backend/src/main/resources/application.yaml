@@ -24,8 +24,10 @@ spring:
 
   servlet:
     multipart:
-      max-file-size: 10MB
-      max-request-size: 20MB
+      # 单张图片上限对齐 api_design.yaml 契约（≤5MB）；超限由框架抛
+      # MaxUploadSizeExceededException，经 GlobalExceptionHandler 翻成 40001。
+      max-file-size: 5MB
+      max-request-size: 10MB
 
 mybatis-plus:
   # 预留手写 XML 的位置；当前 MVP 主要用 BaseMapper，暂无 XML
@@ -45,6 +47,10 @@ mybatis-plus:
 jwt:
   secret: ${JWT_SECRET:}
   expiration: ${JWT_EXPIRATION:24h}
+
+file:
+  storage:
+    root: ${FILE_STORAGE_ROOT:uploads}
 
 logging:
   level:

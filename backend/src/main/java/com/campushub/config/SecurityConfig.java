@@ -1,7 +1,5 @@
 package com.campushub.config;
 
-import com.campushub.security.JwtProperties;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -13,11 +11,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
  * <p>本项目不引入 Spring Security 过滤器链，仅复用其 {@link BCryptPasswordEncoder}
  * 做密码哈希，鉴权由轻量拦截器方案完成（见 {@code security} 包）。
  *
- * <p>{@code @EnableConfigurationProperties} 在此注册 {@link JwtProperties}，
- * 使其能绑定 {@code jwt.*} 配置并被注入到 {@code JwtUtil}。
+ * <p>{@code JwtProperties} 等配置类的注册集中在 {@link PropertiesConfig}。
  */
 @Configuration
-@EnableConfigurationProperties(JwtProperties.class)
 public class SecurityConfig {
 
     /**

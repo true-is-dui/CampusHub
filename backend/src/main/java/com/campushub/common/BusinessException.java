@@ -2,6 +2,8 @@ package com.campushub.common;
 
 import lombok.Getter;
 
+import java.util.Map;
+
 /**
  * 业务异常：当请求在语法上合法、但违反业务规则时由 Service 层抛出，
  * 例如重复接单、在错误状态下完成订单、越权操作他人资源等。
@@ -12,6 +14,9 @@ import lombok.Getter;
  *
  * <p>继承 {@link RuntimeException}（非受检异常），这样 Service 方法签名
  * 不必到处 {@code throws}，且抛出后会让当前 {@code @Transactional} 事务回滚。
+ *
+ * <p>状态类错误推荐用接收 {@link ErrorReason} 的便利构造器：自动把
+ * {@code errors} 组装成 {@code {"reason": <枚举名>}}，避免散落裸字符串。
  */
 @Getter
 public class BusinessException extends RuntimeException {
@@ -21,7 +26,7 @@ public class BusinessException extends RuntimeException {
 
     /**
      * 结构化错误详情，可选。状态类错误通常用 {@code reason} 作 key，
-     * 例如 {@code {"reason": "订单不在待接单状态"}}；为 null 时响应不含 errors。
+     * 例如 {@code {"reason": "RESOURCE_NOT_FOUND"}}；为 null 时响应不含 errors。
      */
     private final transient Object errors;
 
@@ -37,5 +42,21 @@ public class BusinessException extends RuntimeException {
         super(message);
         this.errorCode = errorCode;
         this.errors = errors;
+    }
+
+    /**
+     * 状态类错误便利构造器：用 {@code reason} 自带的中文提示作 message，
+     * 并把 {@code errors} 组装为 {@code {"reason": reason.name()}}。
+     */
+    public BusinessException(ErrorCode errorCode, ErrorReason reason) {
+        this(errorCode, reason.getDefaultMessage(), Map.of("reason", reason.name()));
+    }
+
+    /**
+     * 状态类错误便利构造器：自定义 message，
+     * {@code errors} 仍组装为 {@code {"reason": reason.name()}}。
+     */
+    public BusinessException(ErrorCode errorCode, ErrorReason reason, String message) {
+        this(errorCode, message, Map.of("reason", reason.name()));
     }
 }

@@ -11,6 +11,9 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -68,6 +71,28 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ResponseEntity<ErrorResponse> handleMissingParam(MissingServletRequestParameterException ex) {
         Map<String, String> fieldErrors = Map.of(ex.getParameterName(), "缺少必填参数");
+        return build(ErrorCode.INVALID_PARAM, ErrorCode.INVALID_PARAM.getDefaultMessage(), fieldErrors);
+    }
+
+    /** 缺少必填 multipart 文件字段。 */
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ErrorResponse> handleMissingPart(MissingServletRequestPartException ex) {
+        Map<String, String> fieldErrors = Map.of(ex.getRequestPartName(), "缺少必填文件");
+        return build(ErrorCode.INVALID_PARAM, ErrorCode.INVALID_PARAM.getDefaultMessage(), fieldErrors);
+    }
+
+    /** 查询参数或路径参数类型转换失败（如非法枚举值）。 */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        String name = ex.getName();
+        Map<String, String> fieldErrors = Map.of(name, "参数取值非法");
+        return build(ErrorCode.INVALID_PARAM, ErrorCode.INVALID_PARAM.getDefaultMessage(), fieldErrors);
+    }
+
+    /** multipart 请求超过 Spring 全局上传大小限制。 */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleMaxUploadSize(MaxUploadSizeExceededException ex) {
+        Map<String, String> fieldErrors = Map.of("file", "上传文件过大");
         return build(ErrorCode.INVALID_PARAM, ErrorCode.INVALID_PARAM.getDefaultMessage(), fieldErrors);
     }
 

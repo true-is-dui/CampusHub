@@ -1,6 +1,7 @@
 package com.campushub.security;
 
 import com.campushub.common.CurrentUserContext;
+import com.campushub.config.JwtProperties;
 import com.campushub.entity.enums.AuthStatus;
 import com.campushub.entity.enums.UserRole;
 import io.jsonwebtoken.Claims;

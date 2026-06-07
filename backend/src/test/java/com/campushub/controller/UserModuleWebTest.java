@@ -9,6 +9,7 @@ import com.campushub.security.AuthInterceptor;
 import com.campushub.security.JwtUtil;
 import com.campushub.service.AuthService;
 import com.campushub.service.UserService;
+import com.campushub.service.VerificationReviewService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -42,6 +43,8 @@ class UserModuleWebTest {
     private AuthService authService;
     @MockitoBean
     private UserService userService;
+    @MockitoBean
+    private VerificationReviewService verificationReviewService;
     // 拦截器依赖 JwtUtil；Web 切片不加载它，需 MockitoBean 注入
     @MockitoBean
     private JwtUtil jwtUtil;
