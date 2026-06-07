@@ -45,11 +45,11 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'  // [新增] 导入 router 用于跳转
+import { ref, reactive, onMounted, inject } from 'vue'
+import { useRouter } from 'vue-router'
 import { getNotifications, markRead } from '@/api/notification'
 
-const router = useRouter()  // [新增]
+const router = useRouter()
 const loading = ref(false)
 const notifications = ref([])
 
@@ -59,7 +59,6 @@ const pagination = reactive({
   total: 0
 })
 
-// [修复] 补充 VERIFICATION 和 EVALUATION 类型映射
 const typeLabelMap = {
   PICKUP: '代取相关',
   PAYMENT: '支付相关',
@@ -74,11 +73,11 @@ function getTypeLabel(type) {
 
 function getTypeTag(type) {
   const map = {
-    PICKUP: 'danger',       // 改为红色，更醒目
+    PICKUP: 'danger',
     PAYMENT: 'warning',
     SYSTEM: 'info',
     VERIFICATION: 'success',
-    EVALUATION: 'info'      // 改为蓝色
+    EVALUATION: 'info'
   }
   return map[type] || 'info'
 }
@@ -115,18 +114,22 @@ async function loadNotifications() {
   }
 }
 
+// 注入 Layout 提供的刷新未读数方法
+const refreshUnreadCount = inject('refreshUnreadCount', null)
+
 async function handleRead(item) {
-  // 标记已读
   if (item.readStatus === 'UNREAD') {
     try {
       await markRead(item.notificationId)
       item.readStatus = 'READ'
+      // 立即刷新全局未读数
+      if (refreshUnreadCount) refreshUnreadCount()
     } catch {
       // ignore
     }
   }
 
-  // 根据通知类型跳转到关联页面（先检查具体类型，再检查通用 businessType）
+  // 根据通知类型跳转到关联页面
   if (item.type === 'EVALUATION' && item.businessId) {
     router.push(`/evaluation/${item.businessId}`)
   } else if (item.type === 'VERIFICATION') {
@@ -136,7 +139,6 @@ async function handleRead(item) {
   } else if (item.businessType === 'PICKUP_REQUEST' && item.businessId) {
     router.push(`/pickup/${item.businessId}`)
   }
-  // SYSTEM 类型或其他未知类型不跳转，仅展示信息
 }
 
 onMounted(() => {

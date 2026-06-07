@@ -60,7 +60,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { getUnreadCount } from '@/api/notification'
@@ -71,7 +71,7 @@ const router = useRouter()
 const userStore = useUserStore()
 const unreadCount = ref(0)
 const avatarSrc = ref('')
-let pollTimer = null // 轮询定时器
+let pollTimer = null
 
 const activeMenu = computed(() => route.path)
 
@@ -102,6 +102,9 @@ async function fetchUnreadCount() {
   }
 }
 
+// 将 fetchUnreadCount 提供给子组件，以便标记已读后立即刷新
+provide('refreshUnreadCount', fetchUnreadCount)
+
 function handleCommand(command) {
   if (command === 'profile') {
     router.push('/profile')
@@ -116,12 +119,10 @@ function handleCommand(command) {
 onMounted(() => {
   fetchUnreadCount()
   loadAvatar()
-  // [新增] 每30秒轮询未读通知数
   pollTimer = setInterval(fetchUnreadCount, 30000)
 })
 
 onUnmounted(() => {
-  // [新增] 清除轮询定时器
   if (pollTimer) {
     clearInterval(pollTimer)
     pollTimer = null
