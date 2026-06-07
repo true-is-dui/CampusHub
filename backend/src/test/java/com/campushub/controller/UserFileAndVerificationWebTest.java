@@ -49,6 +49,8 @@ class UserFileAndVerificationWebTest {
     @MockitoBean
     private com.campushub.service.NotificationService notificationService;
     @MockitoBean
+    private com.campushub.service.EvaluationService evaluationService;
+    @MockitoBean
     private JwtUtil jwtUtil;
 
     @Test

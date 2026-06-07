@@ -32,6 +32,7 @@ import com.campushub.service.NotificationService;
 import com.campushub.service.PaymentService;
 import com.campushub.service.PickupService;
 import com.campushub.service.UserService;
+import com.campushub.service.dto.PickupEvaluationContext;
 import com.campushub.service.dto.PrepayResult;
 import com.campushub.service.dto.StoredFileContent;
 import com.campushub.service.dto.UserBrief;
@@ -360,6 +361,19 @@ public class PickupServiceImpl implements PickupService {
         Page<PickupRequest> page = pickupRequestMapper.selectPage(pageQuery.toMpPage(), wrapper);
         List<PickupSummary> list = page.getRecords().stream().map(this::toSummary).toList();
         return PageResult.of(page, list);
+    }
+
+    // ---------------- 评价上下文（供评价模块） ----------------
+
+    @Override
+    public PickupEvaluationContext queryPickupEvaluationContext(Long pickupId) {
+        PickupRequest pickup = requirePickup(pickupId);
+        return PickupEvaluationContext.builder()
+                .pickupId(pickup.getId())
+                .publisherId(pickup.getPublisherId())
+                .acceptorId(pickup.getAcceptorId())
+                .status(pickup.getStatus())
+                .build();
     }
 
     // ---------------- 私有辅助 ----------------

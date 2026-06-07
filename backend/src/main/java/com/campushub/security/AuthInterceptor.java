@@ -47,10 +47,17 @@ public class AuthInterceptor implements HandlerInterceptor {
      * 对这些路径：带有效 Token 时照常还原身份，缺失 / 无效 Token 时<b>放过不抛 401</b>——
      * 公开 GET（不带 {@code @CurrentUser}）正常返回；同路径的写接口仍因 {@code @CurrentUser}
      * 解析不到上下文而得到 401，鉴权语义不丢。
+     * <p>注意：用户公开读接口（公开主页 / 好评率 / 评价列表）也用 GET-only 的可选鉴权放行，
+     * 而非 WebMvcConfig 白名单——白名单按路径放行、无法区分方法，单段通配会连同受保护的
+     * {@code PUT /users/me/profile} 一并放行（通配段匹配 {@code me}）。可选鉴权仅放宽 GET，
+     * 故公开主页 GET 放行、资料编辑 PUT 仍需鉴权。
      */
     private static final String[] OPTIONAL_AUTH_PATHS = {
             "/pickup-requests",
-            "/pickup-requests/*"
+            "/pickup-requests/*",
+            "/users/*/profile",
+            "/users/*/rating-summary",
+            "/users/*/evaluations"
     };
 
     @Override

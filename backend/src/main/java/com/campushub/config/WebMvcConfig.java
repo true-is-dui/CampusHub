@@ -24,7 +24,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
     private final AuthInterceptor authInterceptor;
     private final CurrentUserArgumentResolver currentUserArgumentResolver;
 
-    /** 无需登录即可访问的路径：注册、登录，以及容器内部错误转发。 */
+    /** 无需登录即可访问的路径：注册、登录、用户头像，以及容器内部错误转发。 */
     private static final String[] AUTH_WHITELIST = {
             "/auth/**",
             "/users/*/avatar",

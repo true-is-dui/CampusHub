@@ -55,7 +55,13 @@ public enum ErrorReason {
     COMPLETION_PROOF_NOT_AVAILABLE("完成凭证尚未上传或不可读取"),
 
     /** 当前用户不是该通知的接收者，无权操作（标记已读等）。 */
-    NOT_NOTIFICATION_RECEIVER("无权操作该通知");
+    NOT_NOTIFICATION_RECEIVER("无权操作该通知"),
+
+    /**
+     * 当前不满足评价条件：服务未完成、已评价过，或当前状态不允许评价。
+     * 契约 {@code POST /pickup-requests/{pickupId}/evaluations} 的 409 统一归此 reason。
+     */
+    PICKUP_EVALUATION_NOT_ALLOWED("当前不满足评价条件");
 
     /** 缺省中文提示语；调用方可用更具体的 message 覆盖。 */
     private final String defaultMessage;

@@ -1,6 +1,7 @@
 package com.campushub.service;
 
 import com.campushub.dto.user.UserMeResponse;
+import com.campushub.dto.user.UserPublicProfile;
 import com.campushub.service.dto.StoredFileContent;
 import com.campushub.service.dto.UserBrief;
 import org.springframework.web.multipart.MultipartFile;
@@ -37,6 +38,15 @@ public interface UserService {
 
     /** 公开读取用户头像；用户不存在、未设置头像或文件不存在均返回 404。 */
     StoredFileContent loadAvatar(Long userId);
+
+    /**
+     * 读取用户公开主页（昵称/学院/联系方式），公开访问。
+     *
+     * <p>只暴露公开资料，绝不含学号/真实姓名/认证材料（FR-UM-03）。评价摘要不在本方法内组装：
+     * {@code ratingSummary} 由 Controller 按 {@code includeRating} 决定是否经评价服务填充，
+     * 保持用户模块不反向依赖评价模块。用户不存在抛 404。
+     */
+    UserPublicProfile getPublicProfile(Long userId);
 
     /**
      * 按 ID 批量读取用户公开摘要，供其他模块列表展示（一次 IN 查询，避免 N+1）。
