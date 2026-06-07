@@ -5,6 +5,7 @@ import com.campushub.common.PageResult;
 import com.campushub.dto.pickup.PickupSummary;
 import com.campushub.dto.user.LoginSession;
 import com.campushub.dto.user.UserMeResponse;
+import com.campushub.dto.user.UserPublicProfile;
 import com.campushub.entity.enums.AuthStatus;
 import com.campushub.entity.enums.PickupParticipantRole;
 import com.campushub.entity.enums.PickupStatus;
@@ -54,6 +55,8 @@ class UserModuleWebTest {
     private PickupService pickupService;
     @MockitoBean
     private com.campushub.service.NotificationService notificationService;
+    @MockitoBean
+    private com.campushub.service.EvaluationService evaluationService;
     // 拦截器依赖 JwtUtil；Web 切片不加载它，需 MockitoBean 注入
     @MockitoBean
     private JwtUtil jwtUtil;
@@ -143,5 +146,31 @@ class UserModuleWebTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.list").isArray());
+    }
+
+    // ---------------- 用户公开主页 / 评价（公开访问，白名单放行） ----------------
+
+    @Test
+    void publicProfile_isPublic_returnsOk_withoutToken() throws Exception {
+        when(userService.getPublicProfile(5L)).thenReturn(
+                UserPublicProfile.builder().nickname("小明").college("软件学院").build());
+
+        mockMvc.perform(get("/users/5/profile"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.nickname").value("小明"))
+                // 默认 includeRating=false，评价摘要为 null
+                .andExpect(jsonPath("$.data.ratingSummary").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
+    void ratingSummary_isPublic_returnsOk_withoutToken() throws Exception {
+        when(evaluationService.queryUserRatingSummary(5L)).thenReturn(
+                com.campushub.dto.evaluation.RatingSummary.builder().userId(5L).build());
+
+        mockMvc.perform(get("/users/5/rating-summary"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.userId").value(5));
     }
 }

@@ -4,6 +4,9 @@ import com.campushub.common.ApiResponse;
 import com.campushub.common.CurrentUserContext;
 import com.campushub.common.PageQuery;
 import com.campushub.common.PageResult;
+import com.campushub.dto.evaluation.EvaluationCreateRequest;
+import com.campushub.dto.evaluation.EvaluationEligibility;
+import com.campushub.dto.evaluation.EvaluationSubmitResult;
 import com.campushub.dto.pickup.CompletionConfirmResult;
 import com.campushub.dto.pickup.PickupAcceptResult;
 import com.campushub.dto.pickup.PickupCancelRequest;
@@ -15,6 +18,7 @@ import com.campushub.dto.pickup.PickupRequestSummary;
 import com.campushub.entity.enums.RewardType;
 import com.campushub.security.CurrentUser;
 import com.campushub.service.PickupService;
+import com.campushub.service.EvaluationService;
 import com.campushub.service.dto.StoredFileContent;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -50,6 +54,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class PickupController {
 
     private final PickupService pickupService;
+    private final EvaluationService evaluationService;
 
     // ---------------- 发布 / 浏览 / 详情 ----------------
 
@@ -125,6 +130,31 @@ public class PickupController {
                                                   @Valid @RequestBody(required = false) PickupCancelRequest request) {
         String detail = request == null ? null : request.getReason();
         return ApiResponse.ok(pickupService.cancelPickup(pickupId, me.getCurrentUserId(), detail));
+    }
+
+    // ---------------- 评价（按路径前缀归本 controller，委托评价服务） ----------------
+
+    /**
+     * 提交代取服务评价。被评价人不由前端提交，后端按 pickupId + 当前用户推导。
+     *
+     * <p>路径在 {@code /pickup-requests/{id}} 下，归本 controller；业务委托 {@link EvaluationService}。
+     */
+    @PostMapping("/{pickupId}/evaluations")
+    public ApiResponse<EvaluationSubmitResult> submitEvaluation(
+            @CurrentUser CurrentUserContext me,
+            @PathVariable Long pickupId,
+            @Valid @RequestBody EvaluationCreateRequest request) {
+        return ApiResponse.ok(
+                evaluationService.submitEvaluation(pickupId, me.getCurrentUserId(), request));
+    }
+
+    /** 查询当前用户对该代取服务的评价资格（供前端决定是否展示评价入口）。 */
+    @GetMapping("/{pickupId}/evaluation-eligibility")
+    public ApiResponse<EvaluationEligibility> evaluationEligibility(
+            @CurrentUser CurrentUserContext me,
+            @PathVariable Long pickupId) {
+        return ApiResponse.ok(
+                evaluationService.queryEvaluationEligibility(pickupId, me.getCurrentUserId()));
     }
 
     private ResponseEntity<Resource> imageResponse(StoredFileContent content) {

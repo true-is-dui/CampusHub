@@ -39,6 +39,8 @@ class PickupModuleWebTest {
     @MockitoBean
     private PickupService pickupService;
     @MockitoBean
+    private com.campushub.service.EvaluationService evaluationService;
+    @MockitoBean
     private JwtUtil jwtUtil;
 
     @BeforeEach
@@ -98,5 +100,35 @@ class PickupModuleWebTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("CANCELLED"))
                 .andExpect(jsonPath("$.data.cancelReason").value("USER_CANCELLED"));
+    }
+
+    // ---------------- 评价接口 ----------------
+
+    @Test
+    void submitEvaluation_requiresAuth_401WithoutToken() throws Exception {
+        // 受保护写接口：路径两段，不在可选鉴权放行范围内
+        mockMvc.perform(post("/pickup-requests/5/evaluations")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"ratingLevel\":\"GOOD\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(40101));
+    }
+
+    @Test
+    void submitEvaluation_badWithoutContent_returns400() throws Exception {
+        // BAD 缺 content 由 DTO @AssertTrue 拦截，参数校验 400，不进 service
+        mockMvc.perform(post("/pickup-requests/5/evaluations")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"ratingLevel\":\"BAD\"}")
+                        .header("Authorization", "Bearer VALID"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(40001));
+    }
+
+    @Test
+    void evaluationEligibility_requiresAuth_401WithoutToken() throws Exception {
+        mockMvc.perform(get("/pickup-requests/5/evaluation-eligibility"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(40101));
     }
 }

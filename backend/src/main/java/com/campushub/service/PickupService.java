@@ -12,6 +12,7 @@ import com.campushub.dto.pickup.PickupRequestSummary;
 import com.campushub.dto.pickup.PickupSummary;
 import com.campushub.entity.enums.PickupStatus;
 import com.campushub.entity.enums.RewardType;
+import com.campushub.service.dto.PickupEvaluationContext;
 import com.campushub.service.dto.StoredFileContent;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -71,4 +72,12 @@ public interface PickupService {
 
     /** 我的接单：按状态可选筛选，返回 PickupSummary 分页。 */
     PageResult<PickupSummary> queryMyAccepted(Long currentUserId, PickupStatus status, PageQuery pageQuery);
+
+    /**
+     * 向评价模块提供代取服务的评价上下文（发布方 / 接单方 / 状态）。
+     *
+     * <p>跨模块只回业务层 DTO、不暴露代取实体（第四批准则）；评价模块据此判断参与者、
+     * 推导被评价人与角色、校验服务是否已完成。代取服务不存在抛 404。
+     */
+    PickupEvaluationContext queryPickupEvaluationContext(Long pickupId);
 }

@@ -6,9 +6,12 @@ import com.campushub.common.PageQuery;
 import com.campushub.common.PageResult;
 import com.campushub.dto.notification.NotificationItem;
 import com.campushub.dto.notification.UnreadCountResponse;
+import com.campushub.dto.evaluation.EvaluationHistorySummary;
+import com.campushub.dto.evaluation.RatingSummary;
 import com.campushub.dto.pickup.PickupSummary;
 import com.campushub.dto.user.UpdateProfileRequest;
 import com.campushub.dto.user.UserMeResponse;
+import com.campushub.dto.user.UserPublicProfile;
 import com.campushub.dto.user.VerificationSubmitRequest;
 import com.campushub.dto.user.VerificationSubmitResponse;
 import com.campushub.entity.enums.PickupParticipantRole;
@@ -16,6 +19,7 @@ import com.campushub.entity.enums.PickupStatus;
 import com.campushub.security.CurrentUser;
 import com.campushub.service.PickupService;
 import com.campushub.service.dto.StoredFileContent;
+import com.campushub.service.EvaluationService;
 import com.campushub.service.NotificationService;
 import com.campushub.service.UserService;
 import com.campushub.service.VerificationReviewService;
@@ -55,6 +59,7 @@ public class UserController {
     private final VerificationReviewService verificationReviewService;
     private final PickupService pickupService;
     private final NotificationService notificationService;
+    private final EvaluationService evaluationService;
 
 
     /** 获取当前登录用户的完整资料（读库返回最新值）。 */
@@ -136,5 +141,45 @@ public class UserController {
             .contentType(MediaType.parseMediaType(content.getMimeType()))
             .contentLength(content.getFileSize())
             .body(content.getResource());
+    }
+
+    /**
+     * 查看用户公开主页（公开访问）。{@code includeRating=true} 时附带评价摘要，否则为空。
+     *
+     * <p>公开资料经 {@link UserService}；评价摘要按需经 {@link EvaluationService} 填充，
+     * 保持用户模块不反向依赖评价模块（组合在 controller 完成）。
+     */
+    @GetMapping("/{userId}/profile")
+    public ApiResponse<UserPublicProfile> publicProfile(
+            @PathVariable Long userId,
+            @RequestParam(required = false, defaultValue = "false") boolean includeRating) {
+        UserPublicProfile profile = userService.getPublicProfile(userId);
+        if (includeRating) {
+            RatingSummary ratingSummary = evaluationService.queryUserRatingSummary(userId);
+            profile = UserPublicProfile.builder()
+                    .nickname(profile.getNickname())
+                    .college(profile.getCollege())
+                    .contact(profile.getContact())
+                    .ratingSummary(ratingSummary)
+                    .build();
+        }
+        return ApiResponse.ok(profile);
+    }
+
+    /**
+     * 查询用户好评率摘要（公开访问）。路径在 {@code /users/{userId}} 下，归本 controller；
+     * 委托 {@link EvaluationService}。
+     */
+    @GetMapping("/{userId}/rating-summary")
+    public ApiResponse<RatingSummary> ratingSummary(@PathVariable Long userId) {
+        return ApiResponse.ok(evaluationService.queryUserRatingSummary(userId));
+    }
+
+    /** 查询用户收到的评价列表（公开访问，分页）。委托 {@link EvaluationService}。 */
+    @GetMapping("/{userId}/evaluations")
+    public ApiResponse<PageResult<EvaluationHistorySummary>> userEvaluations(
+            @PathVariable Long userId,
+            @Valid PageQuery pageQuery) {
+        return ApiResponse.ok(evaluationService.queryUserEvaluations(userId, pageQuery));
     }
 }

@@ -5,6 +5,7 @@ import com.campushub.common.BusinessException;
 import com.campushub.common.ErrorCode;
 import com.campushub.common.ErrorReason;
 import com.campushub.dto.user.UserMeResponse;
+import com.campushub.dto.user.UserPublicProfile;
 import com.campushub.entity.User;
 import com.campushub.entity.enums.AuthStatus;
 import com.campushub.entity.enums.FileBusinessType;
@@ -92,6 +93,18 @@ public class UserServiceImpl implements UserService {
 
         user.updateProfile(nextNickname, nextAvatarFileId, nextCollege, nextContact);
         userMapper.updateById(user);
+    }
+
+    @Override
+    public UserPublicProfile getPublicProfile(Long userId) {
+        User user = requireUser(userId);
+        // 只暴露公开资料；ratingSummary 由 Controller 按 includeRating 决定是否经评价服务填充。
+        return UserPublicProfile.builder()
+                .nickname(user.getNickname())
+                .college(user.getCollege())
+                .contact(user.getContact())
+                .ratingSummary(null)
+                .build();
     }
 
     @Override
