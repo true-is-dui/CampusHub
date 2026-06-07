@@ -29,7 +29,7 @@
 后端流水线包含：
 
 - `backend-test`
-  运行 `mvn test jacoco:report`
+  运行 `mvn verify`
 - `backend-build`
   运行 `mvn -DskipTests package`
 
@@ -67,7 +67,7 @@ cd backend
 结果：
 
 - 共执行 `65` 项测试，全部通过
-- JaCoCo 行覆盖率 `60.70%`
+- JaCoCo 行覆盖率 `60.62%`
 - 后端可完成 `verify` 与打包
 
 ### 前端
@@ -94,4 +94,4 @@ npm run build
 
 ## 5. 结论
 
-P4 所需的 CI/CD 配置已补齐，并覆盖依赖安装、自动测试、覆盖率报告和构建产物要求，符合课程对“配置存在即可”的最新说明。
+P4 所需的 CI/CD 配置已补齐，并覆盖依赖安装、自动测试、覆盖率阈值校验、构建产物导出要求，符合课程对“配置存在即可”的最新说明。
