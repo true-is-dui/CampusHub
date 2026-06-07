@@ -43,9 +43,10 @@ public class NotificationRecord {
     /** 关联业务 ID，例如 pickup_requests.id */
     private Long businessId;
 
-    /** 是否已读，false=未读，true=已读（映射 TINYINT(1)） */
-    @TableField("is_read")
-    private Boolean read;
+    /** 是否已读，false=未读，true=已读（映射 TINYINT(1) 列 is_read）。
+     *  字段名用 isRead 而非 read：read 是 MySQL 保留字，MP 在 SELECT 时会以
+     *  Java 属性名作列别名（is_read AS read），裸 read 无反引号会触发语法错误。 */
+    private Boolean isRead;
 
     /** 已读时间 */
     private LocalDateTime readAt;
@@ -62,7 +63,7 @@ public class NotificationRecord {
 
     /** 标记为已读 */
     public void markRead() {
-        this.read = true;
+        this.isRead = true;
         this.readAt = LocalDateTime.now();
     }
 }

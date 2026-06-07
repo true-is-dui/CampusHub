@@ -52,7 +52,10 @@ public enum ErrorReason {
     ACCEPT_DEADLINE_EXPIRED("代取服务已超过接单截止时间"),
 
     /** 完成凭证尚未上传，或当前状态下不可读取完成凭证。 */
-    COMPLETION_PROOF_NOT_AVAILABLE("完成凭证尚未上传或不可读取");
+    COMPLETION_PROOF_NOT_AVAILABLE("完成凭证尚未上传或不可读取"),
+
+    /** 当前用户不是该通知的接收者，无权操作（标记已读等）。 */
+    NOT_NOTIFICATION_RECEIVER("无权操作该通知");
 
     /** 缺省中文提示语；调用方可用更具体的 message 覆盖。 */
     private final String defaultMessage;

@@ -10,9 +10,11 @@ import com.campushub.entity.enums.AuthStatus;
 import com.campushub.entity.enums.FileBusinessType;
 import com.campushub.entity.enums.FileUsage;
 import com.campushub.entity.enums.ReviewStatus;
+import com.campushub.entity.enums.NotificationType;
 import com.campushub.entity.enums.UserRole;
 import com.campushub.mapper.VerificationReviewMapper;
 import com.campushub.service.FileStorageService;
+import com.campushub.service.NotificationService;
 import com.campushub.service.UserService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -32,8 +34,9 @@ class VerificationReviewServiceImplTest {
     private final VerificationReviewMapper reviewMapper = mock(VerificationReviewMapper.class);
     private final UserService userService = mock(UserService.class);
     private final FileStorageService fileStorageService = mock(FileStorageService.class);
+    private final NotificationService notificationService = mock(NotificationService.class);
     private final VerificationReviewServiceImpl service =
-            new VerificationReviewServiceImpl(reviewMapper, userService, fileStorageService);
+            new VerificationReviewServiceImpl(reviewMapper, userService, fileStorageService, notificationService);
 
     @Test
     void submitVerification_createsReviewAndDelegatesUserStatus() {
@@ -81,6 +84,8 @@ class VerificationReviewServiceImplTest {
         assertThat(review.getReviewerId()).isEqualTo(99L);
         verify(userService).markVerificationApproved(7L, "20260001", "张三");
         verify(reviewMapper).updateById(review);
+        verify(notificationService).createNotice(eq(7L), eq(NotificationType.VERIFICATION),
+                any(), any(), any(), any());
     }
 
     @Test
@@ -98,6 +103,8 @@ class VerificationReviewServiceImplTest {
         assertThat(review.getRejectReason()).isEqualTo("材料模糊");
         verify(userService).markVerificationRejected(7L);
         verify(reviewMapper).updateById(review);
+        verify(notificationService).createNotice(eq(7L), eq(NotificationType.VERIFICATION),
+                any(), any(), any(), any());
     }
 
     @Test

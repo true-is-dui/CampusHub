@@ -16,9 +16,11 @@ import com.campushub.entity.VerificationReview;
 import com.campushub.entity.enums.AuthStatus;
 import com.campushub.entity.enums.FileBusinessType;
 import com.campushub.entity.enums.FileUsage;
+import com.campushub.entity.enums.NotificationType;
 import com.campushub.entity.enums.ReviewStatus;
 import com.campushub.mapper.VerificationReviewMapper;
 import com.campushub.service.FileStorageService;
+import com.campushub.service.NotificationService;
 import com.campushub.service.UserService;
 import com.campushub.service.VerificationReviewService;
 import com.campushub.service.dto.StoredFileContent;
@@ -47,6 +49,7 @@ public class VerificationReviewServiceImpl implements VerificationReviewService 
     private final VerificationReviewMapper verificationReviewMapper;
     private final UserService userService;
     private final FileStorageService fileStorageService;
+    private final NotificationService notificationService;
 
     @Override
     @Transactional
@@ -134,6 +137,9 @@ public class VerificationReviewServiceImpl implements VerificationReviewService 
                 review.getSubmittedStudentId(), review.getSubmittedRealName());
         review.markApproved(adminId);
         verificationReviewMapper.updateById(review);
+        notificationService.createNotice(review.getUserId(), NotificationType.VERIFICATION,
+                "实名认证已通过", "您的实名认证申请已通过审核，现在可以发布和接单代取服务。",
+                null, null);
     }
 
     private void reject(VerificationReview review, Long adminId, String reason) {
@@ -142,6 +148,9 @@ public class VerificationReviewServiceImpl implements VerificationReviewService 
         userService.markVerificationRejected(review.getUserId());
         review.markRejected(adminId, normalizedReason);
         verificationReviewMapper.updateById(review);
+        notificationService.createNotice(review.getUserId(), NotificationType.VERIFICATION,
+                "实名认证未通过", "您的实名认证申请未通过审核，原因：" + normalizedReason + "。可修改后重新提交。",
+                null, null);
     }
 
     private void requireAdmin(CurrentUserContext admin) {

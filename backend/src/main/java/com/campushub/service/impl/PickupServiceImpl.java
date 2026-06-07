@@ -21,12 +21,14 @@ import com.campushub.entity.PickupRequest;
 import com.campushub.entity.enums.BusinessType;
 import com.campushub.entity.enums.FileBusinessType;
 import com.campushub.entity.enums.FileUsage;
+import com.campushub.entity.enums.NotificationType;
 import com.campushub.entity.enums.PaymentStatus;
 import com.campushub.entity.enums.PickupCancelReason;
 import com.campushub.entity.enums.PickupStatus;
 import com.campushub.entity.enums.RewardType;
 import com.campushub.mapper.PickupRequestMapper;
 import com.campushub.service.FileStorageService;
+import com.campushub.service.NotificationService;
 import com.campushub.service.PaymentService;
 import com.campushub.service.PickupService;
 import com.campushub.service.UserService;
@@ -55,7 +57,7 @@ import java.util.stream.Collectors;
  *
  * <p>跨模块协作：认证门槛与用户摘要经 {@link UserService}（owner service），凭证文件经
  * {@link FileStorageService}（只回 fileId、受信读取），有报酬支付经 {@link PaymentService}
- * 接口。通知是 Should 模块（第七批），本批不触发。
+ * 接口。关键状态变更（接单/上传凭证/确认完成/取消）后经 {@link NotificationService} 通知对手方。
  */
 @Service
 @RequiredArgsConstructor
@@ -70,6 +72,7 @@ public class PickupServiceImpl implements PickupService {
     private final UserService userService;
     private final FileStorageService fileStorageService;
     private final PaymentService paymentService;
+    private final NotificationService notificationService;
 
     // ---------------- 发布 ----------------
 
@@ -211,6 +214,9 @@ public class PickupServiceImpl implements PickupService {
 
         pickup.markAccepted(currentUserId);
         requireAffected(updateOnStatus(pickup, PickupStatus.WAITING_ACCEPT));
+        notificationService.createNotice(pickup.getPublisherId(), NotificationType.PICKUP,
+                "代取服务已被接单", "您发布的代取服务已被接单，接单方将尽快取件。",
+                BusinessType.PICKUP_REQUEST.name(), pickup.getId());
         return PickupAcceptResult.builder()
                 .status(pickup.getStatus())
                 .acceptedAt(pickup.getAcceptedAt())
@@ -235,6 +241,9 @@ public class PickupServiceImpl implements PickupService {
                 FileBusinessType.PICKUP_REQUEST, pickupId);
         pickup.recordCompletionProof(proofFileId);
         requireAffected(updateOnStatus(pickup, PickupStatus.IN_PROGRESS));
+        notificationService.createNotice(pickup.getPublisherId(), NotificationType.PICKUP,
+                "完成凭证已上传", "接单方已上传完成凭证，请查看并确认完成。",
+                BusinessType.PICKUP_REQUEST.name(), pickup.getId());
     }
 
     @Override
@@ -273,6 +282,9 @@ public class PickupServiceImpl implements PickupService {
             paymentService.settlePayment(pickup.getPaymentId(), pickup.getAcceptorId());
             paymentStatus = PaymentStatus.SETTLED;
         }
+        notificationService.createNotice(pickup.getAcceptorId(), NotificationType.PICKUP,
+                "代取服务已确认完成", "发布方已确认完成本次代取服务，感谢您的帮助。",
+                BusinessType.PICKUP_REQUEST.name(), pickup.getId());
         return CompletionConfirmResult.builder()
                 .status(pickup.getStatus())
                 .paymentStatus(paymentStatus)
@@ -311,6 +323,12 @@ public class PickupServiceImpl implements PickupService {
 
         pickup.markCancelled(PickupCancelReason.USER_CANCELLED, cancelDetail);
         requireAffected(updateOnStatus(pickup, from));
+        // 仅在已有接单方时通知对手方；WAITING_PAYMENT 阶段尚无接单方，无需通知。
+        if (pickup.getAcceptorId() != null) {
+            notificationService.createNotice(pickup.getAcceptorId(), NotificationType.PICKUP,
+                    "代取服务已被取消", "您接单的代取服务已被发布方取消。",
+                    BusinessType.PICKUP_REQUEST.name(), pickup.getId());
+        }
         return PickupCancelResult.builder()
                 .status(pickup.getStatus())
                 .paymentStatus(paymentStatus)

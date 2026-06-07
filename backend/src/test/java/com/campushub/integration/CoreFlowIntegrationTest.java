@@ -64,6 +64,8 @@ class CoreFlowIntegrationTest {
     private VerificationReviewService verificationReviewService;
     @MockitoBean
     private PickupService pickupService;
+    @MockitoBean
+    private com.campushub.service.NotificationService notificationService;
 
     @Test
     void normalFlow_registerLoginPublishAcceptUploadProofAndComplete() throws Exception {

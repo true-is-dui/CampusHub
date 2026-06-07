@@ -8,11 +8,13 @@ import com.campushub.dto.pickup.PickupCreateResult;
 import com.campushub.entity.PickupRequest;
 import com.campushub.entity.enums.BusinessType;
 import com.campushub.entity.enums.FileUsage;
+import com.campushub.entity.enums.NotificationType;
 import com.campushub.entity.enums.PickupCancelReason;
 import com.campushub.entity.enums.PickupStatus;
 import com.campushub.entity.enums.RewardType;
 import com.campushub.mapper.PickupRequestMapper;
 import com.campushub.service.FileStorageService;
+import com.campushub.service.NotificationService;
 import com.campushub.service.PaymentService;
 import com.campushub.service.UserService;
 import com.campushub.service.dto.PrepayResult;
@@ -31,6 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -51,6 +54,9 @@ class PickupServiceImplTest {
     private FileStorageService fileStorageService;
     @Mock
     private PaymentService paymentService;
+
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private PickupServiceImpl pickupService;
@@ -138,6 +144,9 @@ class PickupServiceImplTest {
 
         assertThat(result.getStatus()).isEqualTo(PickupStatus.IN_PROGRESS);
         assertThat(p.getAcceptorId()).isEqualTo(2L);
+        // 接单成功应通知发布方（publisherId=1L）。
+        verify(notificationService).createNotice(eq(1L), eq(NotificationType.PICKUP),
+                anyString(), anyString(), any(), eq(10L));
     }
 
     @Test

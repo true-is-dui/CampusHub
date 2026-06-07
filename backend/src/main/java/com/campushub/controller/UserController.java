@@ -4,6 +4,8 @@ import com.campushub.common.ApiResponse;
 import com.campushub.common.CurrentUserContext;
 import com.campushub.common.PageQuery;
 import com.campushub.common.PageResult;
+import com.campushub.dto.notification.NotificationItem;
+import com.campushub.dto.notification.UnreadCountResponse;
 import com.campushub.dto.pickup.PickupSummary;
 import com.campushub.dto.user.UpdateProfileRequest;
 import com.campushub.dto.user.UserMeResponse;
@@ -14,6 +16,7 @@ import com.campushub.entity.enums.PickupStatus;
 import com.campushub.security.CurrentUser;
 import com.campushub.service.PickupService;
 import com.campushub.service.dto.StoredFileContent;
+import com.campushub.service.NotificationService;
 import com.campushub.service.UserService;
 import com.campushub.service.VerificationReviewService;
 import jakarta.validation.Valid;
@@ -51,6 +54,7 @@ public class UserController {
     private final UserService userService;
     private final VerificationReviewService verificationReviewService;
     private final PickupService pickupService;
+    private final NotificationService notificationService;
 
 
     /** 获取当前登录用户的完整资料（读库返回最新值）。 */
@@ -95,6 +99,33 @@ public class UserController {
                 ? pickupService.queryMyPublished(userId, status, pageQuery)
                 : pickupService.queryMyAccepted(userId, status, pageQuery);
         return ApiResponse.ok(result);
+    }
+
+    /**
+     * 查询当前用户的站内通知列表（分页，按创建时间倒序）。
+     *
+     * <p>路径在 {@code /users/me} 下，归本 controller；委托给 {@link NotificationService}。
+     */
+    @GetMapping("/me/notifications")
+    public ApiResponse<PageResult<NotificationItem>> myNotifications(
+            @CurrentUser CurrentUserContext me,
+            @Valid PageQuery pageQuery) {
+        return ApiResponse.ok(notificationService.queryMyNotices(me.getCurrentUserId(), pageQuery));
+    }
+
+    /** 查询当前用户的未读通知数量（供前端低频轮询）。 */
+    @GetMapping("/me/notifications/unread-count")
+    public ApiResponse<UnreadCountResponse> unreadCount(@CurrentUser CurrentUserContext me) {
+        long count = notificationService.countUnread(me.getCurrentUserId());
+        return ApiResponse.ok(new UnreadCountResponse(count));
+    }
+
+    /** 将指定通知标记为已读（仅接收者本人可操作）。 */
+    @PostMapping("/me/notifications/{notificationId}/read")
+    public ApiResponse<Void> markNotificationRead(@CurrentUser CurrentUserContext me,
+                                                  @PathVariable Long notificationId) {
+        notificationService.markRead(notificationId, me.getCurrentUserId());
+        return ApiResponse.ok();
     }
 
     /** 公开读取用户头像。 */
