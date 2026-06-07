@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -100,6 +102,21 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleUnreadableBody(HttpMessageNotReadableException ex) {
         return build(ErrorCode.INVALID_PARAM, "请求体格式错误或字段取值非法", null);
+    }
+
+    /**
+     * 请求路径未匹配到任何接口（或静态资源）：返回统一的 40401 资源不存在。
+     *
+     * <p>前后端分离下，前端调到尚未实现的 API 应得到干净的 404 ErrorResponse，
+     * 而不是落到下方 {@code Exception} 兜底被误报成 500。
+     * <ul>
+     *   <li>{@code NoResourceFoundException}：Spring Boot 6/3.x 中静态资源未命中时抛，默认即生效；</li>
+     *   <li>{@code NoHandlerFoundException}：需配 {@code spring.mvc.throw-exception-if-no-handler-found=true} 才抛，一并兜住。</li>
+     * </ul>
+     */
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
+    public ResponseEntity<ErrorResponse> handleNotFound(Exception ex) {
+        return build(ErrorCode.NOT_FOUND, ErrorCode.NOT_FOUND.getDefaultMessage(), null);
     }
 
     /** 兜底：未预期的服务端异常，记录日志但不向外暴露堆栈细节。 */

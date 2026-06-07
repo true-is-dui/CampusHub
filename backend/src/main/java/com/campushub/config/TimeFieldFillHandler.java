@@ -31,6 +31,9 @@ public class TimeFieldFillHandler implements MetaObjectHandler {
         // strictInsertFill：仅当实体确实有该字段、且字段为 null 时才填充
         this.strictInsertFill(metaObject, "createdAt", LocalDateTime.class, now);
         this.strictInsertFill(metaObject, "updatedAt", LocalDateTime.class, now);
+        // VerificationReview.submittedAt 标了 @TableField(fill = INSERT)，
+        // 须在此显式列出字段名才会被填充；与 createdAt 同一时刻，符合“提交即创建”语义。
+        this.strictInsertFill(metaObject, "submittedAt", LocalDateTime.class, now);
     }
 
     /** 更新时触发：填充标注了 FieldFill.INSERT_UPDATE 的字段 */
