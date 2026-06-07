@@ -2,8 +2,11 @@ package com.campushub.controller;
 
 import com.campushub.common.CurrentUserContext;
 import com.campushub.common.PageResult;
+import com.campushub.dto.pickup.PickupCancelResult;
 import com.campushub.dto.pickup.PickupRequestSummary;
 import com.campushub.entity.enums.AuthStatus;
+import com.campushub.entity.enums.PickupCancelReason;
+import com.campushub.entity.enums.PickupStatus;
 import com.campushub.entity.enums.UserRole;
 import com.campushub.security.JwtUtil;
 import com.campushub.service.PickupService;
@@ -78,5 +81,22 @@ class PickupModuleWebTest {
         mockMvc.perform(get("/pickup-requests/5/credential"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(40101));
+    }
+
+    @Test
+    void cancel_returnsCancelled_whenAuthenticated() throws Exception {
+        when(pickupService.cancelPickup(5L, 7L, "改主意了"))
+                .thenReturn(PickupCancelResult.builder()
+                        .status(PickupStatus.CANCELLED)
+                        .cancelReason(PickupCancelReason.USER_CANCELLED)
+                        .build());
+
+        mockMvc.perform(post("/pickup-requests/5/cancel")
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"改主意了\"}")
+                        .header("Authorization", "Bearer VALID"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.data.cancelReason").value("USER_CANCELLED"));
     }
 }

@@ -44,7 +44,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleBodyValidation(MethodArgumentNotValidException ex) {
         Map<String, String> fieldErrors = new LinkedHashMap<>();
         for (FieldError error : ex.getBindingResult().getFieldErrors()) {
-            fieldErrors.putIfAbsent(error.getField(), error.getDefaultMessage());
+            fieldErrors.putIfAbsent(normalizeFieldName(error.getField()), error.getDefaultMessage());
         }
         return build(ErrorCode.INVALID_PARAM, ErrorCode.INVALID_PARAM.getDefaultMessage(), fieldErrors);
     }
@@ -54,7 +54,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleBind(BindException ex) {
         Map<String, String> fieldErrors = new LinkedHashMap<>();
         for (FieldError error : ex.getBindingResult().getFieldErrors()) {
-            fieldErrors.putIfAbsent(error.getField(), error.getDefaultMessage());
+            fieldErrors.putIfAbsent(normalizeFieldName(error.getField()), error.getDefaultMessage());
         }
         return build(ErrorCode.INVALID_PARAM, ErrorCode.INVALID_PARAM.getDefaultMessage(), fieldErrors);
     }
@@ -137,5 +137,12 @@ public class GlobalExceptionHandler {
         String path = violation.getPropertyPath().toString();
         int idx = path.lastIndexOf('.');
         return idx >= 0 ? path.substring(idx + 1) : path;
+    }
+
+    /**
+     * 统一对外字段名，避免把仅用于实现的辅助校验属性名暴露到 API 错误结构里。
+     */
+    private String normalizeFieldName(String fieldName) {
+        return "rewardAmountConsistent".equals(fieldName) ? "rewardAmount" : fieldName;
     }
 }
