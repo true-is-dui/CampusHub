@@ -1,11 +1,19 @@
-# 配置仅供参考！
+# 学校 GitLab Runner 不稳定，因此保留最小但完整的前端安装与构建流程。
 stages:
   - build
+
+cache:
+  paths:
+    - frontend/node_modules/
 
 frontend-build:
   stage: build
   image: node:20
   script:
     - cd frontend
-    - npm install
+    - npm ci
     - npm run build
+  artifacts:
+    when: always
+    paths:
+      - frontend/dist/

@@ -6,6 +6,7 @@ import com.campushub.common.PageResult;
 import com.campushub.dto.user.VerificationReviewSummary;
 import com.campushub.dto.user.VerificationSubmitResponse;
 import com.campushub.entity.enums.AuthStatus;
+import com.campushub.entity.enums.ReviewStatus;
 import com.campushub.entity.enums.UserRole;
 import com.campushub.security.JwtUtil;
 import com.campushub.service.dto.StoredFileContent;
@@ -135,5 +136,32 @@ class UserFileAndVerificationWebTest {
                         .header("Authorization", "Bearer ADMIN"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(40001));
+    }
+
+    @Test
+    void adminCanLoadReviewImage() throws Exception {
+        when(jwtUtil.parse("ADMIN"))
+                .thenReturn(new CurrentUserContext(99L, UserRole.ADMIN, AuthStatus.APPROVED));
+        when(verificationReviewService.loadReviewImage(any(), eq(1L))).thenReturn(new StoredFileContent(
+                new ByteArrayResource(new byte[]{4, 5, 6}), "image/jpeg", 3L));
+
+        mockMvc.perform(get("/admin/verification-reviews/1/image")
+                        .header("Authorization", "Bearer ADMIN"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.IMAGE_JPEG))
+                .andExpect(content().bytes(new byte[]{4, 5, 6}));
+    }
+
+    @Test
+    void adminHandleApprove_returnsOk() throws Exception {
+        when(jwtUtil.parse("ADMIN"))
+                .thenReturn(new CurrentUserContext(99L, UserRole.ADMIN, AuthStatus.APPROVED));
+
+        mockMvc.perform(post("/admin/verification-reviews/1/handle")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"result\":\"APPROVE\"}")
+                        .header("Authorization", "Bearer ADMIN"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
     }
 }

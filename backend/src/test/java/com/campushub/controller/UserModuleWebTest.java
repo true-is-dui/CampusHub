@@ -1,9 +1,13 @@
 package com.campushub.controller;
 
 import com.campushub.common.CurrentUserContext;
+import com.campushub.common.PageResult;
+import com.campushub.dto.pickup.PickupSummary;
 import com.campushub.dto.user.LoginSession;
 import com.campushub.dto.user.UserMeResponse;
 import com.campushub.entity.enums.AuthStatus;
+import com.campushub.entity.enums.PickupParticipantRole;
+import com.campushub.entity.enums.PickupStatus;
 import com.campushub.entity.enums.UserRole;
 import com.campushub.security.AuthInterceptor;
 import com.campushub.security.JwtUtil;
@@ -120,5 +124,22 @@ class UserModuleWebTest {
                 .thenReturn(new CurrentUserContext(7L, UserRole.USER, AuthStatus.APPROVED));
         mockMvc.perform(get("/users/me/pickup-requests").header("Authorization", "Bearer VALID"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void myPickups_returnsList_whenRoleProvided() throws Exception {
+        when(jwtUtil.parse("VALID"))
+                .thenReturn(new CurrentUserContext(7L, UserRole.USER, AuthStatus.APPROVED));
+        when(pickupService.queryMyPublished(any(), any(), any())).thenReturn(
+                PageResult.of(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<PickupSummary>(1, 20, 0),
+                        java.util.List.of()));
+
+        mockMvc.perform(get("/users/me/pickup-requests")
+                        .param("role", PickupParticipantRole.PUBLISHER.name())
+                        .param("status", PickupStatus.WAITING_ACCEPT.name())
+                        .header("Authorization", "Bearer VALID"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.list").isArray());
     }
 }
