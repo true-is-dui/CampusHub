@@ -66,6 +66,15 @@ public interface UserService {
 
     /** 实名认证审核驳回：将用户认证状态置为已驳回。 */
     void markVerificationRejected(Long userId);
+
+    /**
+     * 校验用户已实名认证通过、可参与代取业务（发布、接单）。
+     *
+     * <p>读库取权威认证状态（不信任 JWT 快照可能滞后）；未通过认证抛
+     * {@code FORBIDDEN + AUTH_STATUS_NOT_ALLOWED}（HTTP 403）。供代取等业务模块在
+     * 状态变更前作为前置门槛调用，状态读取归口本 owner service。
+     */
+    void ensureCertified(Long userId);
 }
 
 

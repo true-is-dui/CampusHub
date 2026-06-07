@@ -14,5 +14,7 @@ public enum FileBusinessType {
     /** 头像，溯源到用户 */
     USER_AVATAR,
     /** 实名认证材料，溯源到实名审核记录 */
-    VERIFICATION_REVIEW
+    VERIFICATION_REVIEW,
+    /** 代取取件凭证 / 完成凭证，溯源到代取请求 */
+    PICKUP_REQUEST
 }

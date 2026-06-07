@@ -12,6 +12,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.util.AntPathMatcher;
 
 /**
  * 鉴权拦截器：在受保护接口的 Controller 执行前校验 JWT。
@@ -38,6 +39,20 @@ public class AuthInterceptor implements HandlerInterceptor {
 
     private final JwtUtil jwtUtil;
 
+    private static final AntPathMatcher pathMatcher = new AntPathMatcher();
+
+    /**
+     * 可选鉴权路径：这些接口契约标注 {@code security: []}（公开可访问），但其 URL 与需鉴权的
+     * 写接口共用（如 {@code GET /pickup-requests} 公开浏览 vs {@code POST /pickup-requests} 发布）。
+     * 对这些路径：带有效 Token 时照常还原身份，缺失 / 无效 Token 时<b>放过不抛 401</b>——
+     * 公开 GET（不带 {@code @CurrentUser}）正常返回；同路径的写接口仍因 {@code @CurrentUser}
+     * 解析不到上下文而得到 401，鉴权语义不丢。
+     */
+    private static final String[] OPTIONAL_AUTH_PATHS = {
+            "/pickup-requests",
+            "/pickup-requests/*"
+    };
+
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
         // CORS 预检请求不携带令牌，直接放行交给 CORS 处理
@@ -45,8 +60,12 @@ public class AuthInterceptor implements HandlerInterceptor {
             return true;
         }
 
+        boolean optionalAuth = isOptionalAuthPath(request);
         String header = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (!StringUtils.hasText(header) || !header.startsWith(BEARER_PREFIX)) {
+            if (optionalAuth) {
+                return true; // 公开读接口：无令牌放行，不还原身份
+            }
             throw new BusinessException(ErrorCode.UNAUTHENTICATED);
         }
 
@@ -56,8 +75,24 @@ public class AuthInterceptor implements HandlerInterceptor {
             request.setAttribute(CURRENT_USER_ATTRIBUTE, context);
             return true;
         } catch (JwtException | IllegalArgumentException ex) {
+            if (optionalAuth) {
+                return true; // 公开读接口：令牌无效也放行，按匿名处理
+            }
             // 令牌无效、过期、被篡改或载荷格式异常
             throw new BusinessException(ErrorCode.UNAUTHENTICATED);
         }
+    }
+
+    private boolean isOptionalAuthPath(HttpServletRequest request) {
+        if (!HttpMethod.GET.matches(request.getMethod())) {
+            return false; // 仅公开 GET 放宽；同路径写接口仍需鉴权
+        }
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        for (String pattern : OPTIONAL_AUTH_PATHS) {
+            if (pathMatcher.match(pattern, path)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

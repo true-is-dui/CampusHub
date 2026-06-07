@@ -166,6 +166,15 @@ public class UserServiceImpl implements UserService {
         userMapper.updateById(user);
     }
 
+    @Override
+    public void ensureCertified(Long userId) {
+        User user = requireUser(userId);
+        if (!user.canParticipatePickup()) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, ErrorReason.AUTH_STATUS_NOT_ALLOWED,
+                    "需实名认证通过后才能参与代取服务");
+        }
+    }
+
     private User requireUser(Long userId) {
         User user = userMapper.selectOne(
                 Wrappers.<User>lambdaQuery().eq(User::getId, userId));

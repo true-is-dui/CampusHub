@@ -8,6 +8,7 @@ import com.campushub.entity.enums.UserRole;
 import com.campushub.security.AuthInterceptor;
 import com.campushub.security.JwtUtil;
 import com.campushub.service.AuthService;
+import com.campushub.service.PickupService;
 import com.campushub.service.UserService;
 import com.campushub.service.VerificationReviewService;
 import org.junit.jupiter.api.Test;
@@ -45,6 +46,8 @@ class UserModuleWebTest {
     private UserService userService;
     @MockitoBean
     private VerificationReviewService verificationReviewService;
+    @MockitoBean
+    private PickupService pickupService;
     // 拦截器依赖 JwtUtil；Web 切片不加载它，需 MockitoBean 注入
     @MockitoBean
     private JwtUtil jwtUtil;
@@ -108,5 +111,14 @@ class UserModuleWebTest {
         mockMvc.perform(get("/users/me"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(40101));
+    }
+
+    @Test
+    void myPickups_missingRole_400() throws Exception {
+        // role 为必填查询参数，缺失 → 400（路由挂在 UserController，委托 PickupService）
+        when(jwtUtil.parse("VALID"))
+                .thenReturn(new CurrentUserContext(7L, UserRole.USER, AuthStatus.APPROVED));
+        mockMvc.perform(get("/users/me/pickup-requests").header("Authorization", "Bearer VALID"))
+                .andExpect(status().isBadRequest());
     }
 }

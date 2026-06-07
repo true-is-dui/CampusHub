@@ -40,7 +40,19 @@ public enum ErrorReason {
      * 登录凭证错误（用户不存在或密码错误），不区分以防用户枚举。
      * 契约缺口：{@code api_design.yaml} 尚未定义登录失败的 reason。
      */
-    INVALID_CREDENTIALS("用户名或密码错误");
+    INVALID_CREDENTIALS("用户名或密码错误"),
+
+    /** 当前用户不是该代取服务的参与者（发布方/接单方），无权读取凭证等受限资源。 */
+    NOT_PICKUP_PARTICIPANT("非该代取服务的参与者"),
+
+    /** 代取服务当前状态不允许此操作（如非待接单不能接单、非进行中不能确认完成、不可取消等）。 */
+    PICKUP_STATUS_NOT_ALLOWED("代取服务当前状态不允许此操作"),
+
+    /** 接单时服务已超过接单截止时间并被流转为取消。 */
+    ACCEPT_DEADLINE_EXPIRED("代取服务已超过接单截止时间"),
+
+    /** 完成凭证尚未上传，或当前状态下不可读取完成凭证。 */
+    COMPLETION_PROOF_NOT_AVAILABLE("完成凭证尚未上传或不可读取");
 
     /** 缺省中文提示语；调用方可用更具体的 message 覆盖。 */
     private final String defaultMessage;
