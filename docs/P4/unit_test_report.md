@@ -68,7 +68,7 @@ backend/target/site/jacoco/index.html
 
 - 共执行 `65` 个测试，全部通过
 - `BackendApplicationTests` 已改为稳定的最小 JWT 引导测试并通过
-- JaCoCo 总行覆盖率为 `60.62%`（`covered=431`，`missed=280`）
+- JaCoCo 总行覆盖率为 `60.70%`（`covered=431`，`missed=279`）
 - `verify` 阶段的 `>= 60%` 覆盖率校验已通过
 
 ## 6. 结论
