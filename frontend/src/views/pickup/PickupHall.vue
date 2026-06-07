@@ -67,7 +67,7 @@
           </div>
         </div>
         <div class="card-footer">
-          <span class="publisher">
+          <span class="publisher" @click.stop="goUserProfile(item.publisher?.userId)">
             <el-icon><User /></el-icon>
             {{ item.publisher?.nickname || '匿名用户' }}
           </span>
@@ -123,6 +123,10 @@ function formatTime(dateStr) {
   const d = new Date(dateStr)
   const now = new Date()
   const diff = now - d
+  // 未来时间（如接单截止时间）显示完整日期
+  if (diff < 0) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  }
   if (diff < 60000) return '刚刚'
   if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`
   if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`
@@ -160,6 +164,12 @@ async function loadList() {
 
 function goDetail(id) {
   router.push(`/pickup/${id}`)
+}
+
+function goUserProfile(userId) {
+  if (userId) {
+    router.push(`/user/${userId}`)
+  }
 }
 
 onMounted(() => {
@@ -257,6 +267,11 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 4px;
+  cursor: pointer;
+}
+
+.publisher:hover {
+  color: #409eff;
 }
 
 .pagination-wrapper {

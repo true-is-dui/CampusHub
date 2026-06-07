@@ -28,8 +28,9 @@
           <el-descriptions-item label="物品描述" :span="2">
             {{ detail.itemDescription || '无' }}
           </el-descriptions-item>
+          <!-- 接单截止时间使用格式化函数展示 -->
           <el-descriptions-item label="接单截止时间" :span="2">
-            {{ detail.acceptDeadline || '无' }}
+            {{ formatDateTime(detail.acceptDeadline) || '无' }}
           </el-descriptions-item>
         </el-descriptions>
 
@@ -151,15 +152,18 @@
 
           <!-- Acceptor + IN_PROGRESS -->
           <template v-if="isAcceptor && detail.status === 'IN_PROGRESS' && !completionProofUrl">
-            <el-upload
-                ref="proofUploadRef"
-                :auto-upload="false"
-                :limit="1"
-                accept="image/jpeg,image/png"
-                :on-change="onProofChange"
-            >
-              <el-button type="primary">选择完成凭证</el-button>
-            </el-upload>
+            <div>
+              <el-upload
+                  ref="proofUploadRef"
+                  :auto-upload="false"
+                  :limit="1"
+                  accept="image/jpeg,image/png"
+                  :on-change="onProofChange"
+              >
+                <el-button type="primary">选择完成凭证</el-button>
+              </el-upload>
+              <div class="upload-tip">JPG/PNG，不超过5MB，最多上传一张</div>
+            </div>
             <el-button
                 type="success"
                 :loading="actionLoading"
@@ -280,6 +284,13 @@ function getRatingTag(level) {
 function getRatingLabel(level) {
   const map = { GOOD: '好评', NEUTRAL: '中评', BAD: '差评' }
   return map[level] || level
+}
+
+// 格式化日期时间为 YYYY-MM-DD HH:mm
+function formatDateTime(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 function updateCountdown() {
@@ -535,7 +546,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 样式保持不变 */
 .pickup-detail {
   max-width: 800px;
   margin: 0 auto;
@@ -652,5 +662,11 @@ onMounted(() => {
   margin-top: 24px;
   padding-top: 16px;
   border-top: 1px solid #ebeef5;
+}
+
+.upload-tip {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 8px;
 }
 </style>

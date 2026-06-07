@@ -40,9 +40,10 @@
                 :on-change="(file) => onFileChange(file, 'uploadRefUnverified')"
                 :on-remove="onFileRemove"
             >
-              <el-icon><Plus /></el-icon>
+              <!-- 没有文件时显示加号，有文件后自动隐藏 -->
+              <el-icon v-if="imageFileList.length === 0"><Plus /></el-icon>
             </el-upload>
-            <div class="upload-tip">请上传学生证或校园卡照片，JPG/PNG，不超过5MB</div>
+            <div class="upload-tip">请上传学生证或校园卡照片，JPG/PNG，不超过5MB，最多上传一张</div>
           </el-form-item>
           <el-form-item>
             <el-button type="primary" :loading="submitting" @click="handleSubmit">
@@ -96,9 +97,10 @@
                 :on-change="(file) => onFileChange(file, 'uploadRefRejected')"
                 :on-remove="onFileRemove"
             >
-              <el-icon><Plus /></el-icon>
+              <!-- 没有文件时显示加号，有文件后自动隐藏 -->
+              <el-icon v-if="imageFileList.length === 0"><Plus /></el-icon>
             </el-upload>
-            <div class="upload-tip">请上传学生证或校园卡照片，JPG/PNG，不超过5MB</div>
+            <div class="upload-tip">请上传学生证或校园卡照片，JPG/PNG，不超过5MB，最多上传一张</div>
           </el-form-item>
           <el-form-item>
             <el-button type="primary" :loading="submitting" @click="handleSubmit">
@@ -124,6 +126,8 @@ const uploadRefUnverified = ref(null)
 const uploadRefRejected = ref(null)
 const submitting = ref(false)
 const imageFile = ref(null)
+// 用于控制上传按钮显示的文件列表
+const imageFileList = ref([])
 
 const authStatus = computed(() => userStore.userInfo?.authStatus || 'UNVERIFIED')
 
@@ -185,13 +189,17 @@ function onFileChange(file, uploadRefName) {
       uploadRef.clearFiles()
     }
     imageFile.value = null
+    imageFileList.value = []
     return
   }
   imageFile.value = file.raw
+  // 更新文件列表，控制按钮显隐（只保留当前文件）
+  imageFileList.value = [file]
 }
 
 function onFileRemove() {
   imageFile.value = null
+  imageFileList.value = []
 }
 
 async function handleSubmit() {
@@ -214,6 +222,7 @@ async function handleSubmit() {
     form.realName = ''
     form.studentId = ''
     imageFile.value = null
+    imageFileList.value = []
     if (uploadRefUnverified.value) uploadRefUnverified.value.clearFiles()
     if (uploadRefRejected.value) uploadRefRejected.value.clearFiles()
   } catch {
@@ -226,6 +235,10 @@ async function handleSubmit() {
 onMounted(async () => {
   if (!userStore.userInfo) {
     await userStore.fetchUserInfo()
+  }
+  // 如果之前有缓存学号，可回填（可选）
+  if (userStore.userInfo?.studentId) {
+    form.studentId = userStore.userInfo.studentId
   }
 })
 </script>
