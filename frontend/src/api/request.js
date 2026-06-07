@@ -16,6 +16,52 @@ request.interceptors.request.use(config => {
   return config
 })
 
+/**
+ * 根据错误码和 reason 生成用户提示文本
+ * @param {number} code 业务错误码
+ * @param {string|null} reason errors.reason
+ * @param {string} defaultMsg 默认提示信息
+ * @returns {{ message: string, shouldLogout: boolean }}
+ */
+function buildErrorInfo(code, reason, defaultMsg) {
+  const info = { message: defaultMsg, shouldLogout: false }
+
+  if (code === 40101) {
+    if (reason === 'INVALID_CREDENTIALS') {
+      info.message = '用户名或密码错误'
+      info.shouldLogout = false
+    } else if (reason === 'TOKEN_MISSING_OR_EXPIRED') {
+      info.message = '登录已过期，请重新登录'
+      info.shouldLogout = true
+    } else {
+      // 其他未列出的 reason 也视为 token 相关问题，默认清除并跳转
+      info.message = '认证失败，请重新登录'
+      info.shouldLogout = true
+    }
+  } else if (code === 40301) {
+    const reasonMap = {
+      AUTH_STATUS_NOT_ALLOWED: '账号状态不允许操作',
+      NOT_PICKUP_PARTICIPANT: '您不是该服务的参与者',
+      ADMIN_REQUIRED: '需要管理员权限',
+      NOT_NOTIFICATION_RECEIVER: '您无权操作该通知'
+    }
+    info.message = reasonMap[reason] || defaultMsg || '无权限操作'
+  } else if (code === 40901) {
+    const reasonMap = {
+      DUPLICATE_OR_CONFLICTED_OPERATION: '操作冲突，请重试',
+      ACCEPT_DEADLINE_EXPIRED: '接单截止时间已过，无法接单',
+      PICKUP_STATUS_NOT_ALLOWED: '当前订单状态不允许该操作',
+      PICKUP_NOT_WAITING_PAYMENT: '订单不是待支付状态',
+      PICKUP_EVALUATION_NOT_ALLOWED: '当前不可评价',
+      COMPLETION_PROOF_NOT_AVAILABLE: '完成凭证不可用',
+      VERIFICATION_REVIEW_ALREADY_HANDLED: '该审核已处理'
+    }
+    info.message = reasonMap[reason] || defaultMsg || '操作冲突'
+  }
+
+  return info
+}
+
 // 统一处理业务错误：成功返回 data，失败从 error.response.data 提取业务码
 request.interceptors.response.use(
     response => {
@@ -35,39 +81,22 @@ request.interceptors.response.use(
       // 处理由上方 Promise.reject(res) 抛出的业务错误对象
       if (typeof error.code === 'number' && error.message) {
         const { code, message, errors } = error
-        // 按错误码分类处理
-        switch (code) {
-          case 40001: {
-            // 提取结构化字段错误，如 { role: "role 必填", rewardType: "..." }
-            const detail = errors
-                ? Object.entries(errors).map(([k, v]) => `${k}: ${v}`).join('；')
-                : (message || '参数校验失败')
-            ElMessage.error(detail)
-            break
-          }
-          case 40101:
+        const reason = errors?.reason
+        const { message: displayMsg, shouldLogout } = buildErrorInfo(code, reason, message)
+
+        if (code === 40001) {
+          // 参数校验失败：展示结构化字段错误
+          const detail = errors
+              ? Object.entries(errors).map(([k, v]) => `${k}: ${v}`).join('；')
+              : displayMsg
+          ElMessage.error(detail)
+        } else {
+          // 其他业务错误：根据 shouldLogout 决定是否清除 token 并跳转
+          if (shouldLogout) {
             localStorage.removeItem('token')
             router.push('/login')
-            ElMessage.error('登录已过期，请重新登录')
-            break
-          case 40301:
-            ElMessage.error(message || '无权限操作')
-            break
-          case 40401:
-            ElMessage.error(message || '资源不存在')
-            break
-          case 40901:
-            ElMessage.error(message || '操作冲突')
-            break
-          case 50001:
-            ElMessage.error('服务器内部错误')
-            break
-          case 50201:
-            ElMessage.error(message || '第三方服务异常，请稍后重试')
-            break
-          default:
-            ElMessage.error(message || '请求失败')
-            break
+          }
+          ElMessage.error(displayMsg)
         }
         return Promise.reject(error)
       }
@@ -80,44 +109,50 @@ request.interceptors.response.use(
           let parsed = null
           try { parsed = JSON.parse(text) } catch (e) { /* ignore */ }
           const code = parsed?.code || error.response?.status || 0
+          const reason = parsed?.errors?.reason
           const message = parsed?.message || '请求失败'
-          // 复用错误码处理逻辑
-          handleHttpError(code, message)
+          handleHttpError(code, reason, message)
           return Promise.reject(error)
         })
       }
 
       const code = res?.code || error.response?.status || 0
+      const reason = res?.errors?.reason
       const message = res?.message || '请求失败'
-      handleHttpError(code, message)
+      handleHttpError(code, reason, message)
       return Promise.reject(error)
     }
 )
 
 /**
  * 统一处理 HTTP 错误（含 Blob 解析后的错误）
- * @param {number|string} code 业务错误码或 HTTP 状态码
+ * @param {number} code 业务错误码或 HTTP 状态码
+ * @param {string|null} reason 结构化错误原因
  * @param {string} message 错误提示信息
  */
-function handleHttpError(code, message) {
+function handleHttpError(code, reason, message) {
+  const { message: displayMsg, shouldLogout } = buildErrorInfo(code, reason, message)
+
   if (code === 40001 || code === 400) {
-    ElMessage.error(message || '参数校验失败')
+    ElMessage.error(displayMsg)
   } else if (code === 40101 || code === 401) {
-    localStorage.removeItem('token')
-    router.push('/login')
-    ElMessage.error('登录已过期，请重新登录')
+    if (shouldLogout) {
+      localStorage.removeItem('token')
+      router.push('/login')
+    }
+    ElMessage.error(displayMsg)
   } else if (code === 40301 || code === 403) {
-    ElMessage.error(message || '无权限操作')
+    ElMessage.error(displayMsg)
   } else if (code === 40401 || code === 404) {
-    ElMessage.error(message || '资源不存在')
+    ElMessage.error(displayMsg)
   } else if (code === 40901 || code === 409) {
-    ElMessage.error(message || '操作冲突')
+    ElMessage.error(displayMsg)
   } else if (code === 50001 || code === 500) {
-    ElMessage.error('服务器内部错误')
+    ElMessage.error(displayMsg)
   } else if (code === 50201) {
-    ElMessage.error(message || '第三方服务异常，请稍后重试')
+    ElMessage.error(displayMsg)
   } else {
-    ElMessage.error(message || '网络错误，请稍后重试')
+    ElMessage.error(displayMsg || '网络错误，请稍后重试')
   }
 }
 

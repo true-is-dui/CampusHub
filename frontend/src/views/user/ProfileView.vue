@@ -66,9 +66,10 @@
                 :on-remove="onAvatarRemove"
                 :file-list="avatarFileList"
             >
-              <el-icon><Plus /></el-icon>
+              <!-- 没有文件时显示加号，有文件后自动隐藏 -->
+              <el-icon v-if="avatarFileList.length === 0"><Plus /></el-icon>
             </el-upload>
-            <div class="upload-tip">JPG/PNG，不超过5MB</div>
+            <div class="upload-tip">JPG/PNG，不超过5MB，最多上传一张</div>
           </el-form-item>
           <el-form-item label="昵称" prop="nickname">
             <el-input v-model="editForm.nickname" placeholder="请输入昵称（1-20字符）" maxlength="20" show-word-limit />

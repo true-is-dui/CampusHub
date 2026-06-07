@@ -88,10 +88,12 @@
               :on-change="onFileChange"
               :on-remove="onFileRemove"
               :before-upload="beforeUpload"
+              :file-list="credentialFileList"
           >
-            <el-icon><Plus /></el-icon>
+            <!-- 没有文件时显示加号，有文件后自动隐藏 -->
+            <el-icon v-if="credentialFileList.length === 0"><Plus /></el-icon>
           </el-upload>
-          <div class="upload-tip">请上传取件凭证图片（如快递截图），JPG/PNG，不超过5MB</div>
+          <div class="upload-tip">请上传取件凭证图片（如快递截图），JPG/PNG，不超过5MB，最多上传一张</div>
         </el-form-item>
 
         <el-form-item>
@@ -143,6 +145,8 @@ const showPayDialog = ref(false)
 const createdId = ref(null)
 const payUrl = ref('')
 const credentialFile = ref(null)
+// 用于控制上传按钮显示的文件列表
+const credentialFileList = ref([])
 
 // 支付倒计时相关
 const expireAt = ref(null)
@@ -202,8 +206,14 @@ const rules = {
   ],
   rewardType: [{ required: true, message: '请选择报酬类型', trigger: 'change' }],
   rewardAmount: [{ validator: validateRewardAmount, trigger: 'change' }],
-  acceptDeadline: [{ validator: validateDeadline, trigger: 'change' }],
-  pickupCredential: [{ validator: validateCredential, trigger: 'change' }]
+  acceptDeadline: [
+    { required: true, message: '请选择接单截止时间', trigger: 'change' },
+    { validator: validateDeadline, trigger: 'change' }
+  ],
+  pickupCredential: [
+    { required: true, message: '请上传取件凭证图片', trigger: 'change' },
+    { validator: validateCredential, trigger: 'change' }
+  ]
 }
 
 function disabledDate(date) {
@@ -242,18 +252,22 @@ function onFileChange(file) {
   // 二次校验文件大小（处理某些绕过 beforeUpload 的场景）
   if (file.raw && file.raw.size > 5 * 1024 * 1024) {
     ElMessage.error('取件凭证图片不能超过5MB')
-    // 使用公开方法清除文件列表，同时清空文件引用
+    // 使用公开方法清除文件列表，同时清空文件引用和文件列表
     uploadRef.value?.clearFiles()
     credentialFile.value = null
+    credentialFileList.value = []
     formRef.value?.validateField('pickupCredential')
     return
   }
   credentialFile.value = file.raw
+  // 更新文件列表，控制按钮显隐（只保留当前文件）
+  credentialFileList.value = [file]
   formRef.value?.validateField('pickupCredential')
 }
 
 function onFileRemove() {
   credentialFile.value = null
+  credentialFileList.value = []
   formRef.value?.validateField('pickupCredential')
 }
 
