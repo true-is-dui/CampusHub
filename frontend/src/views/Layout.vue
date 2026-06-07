@@ -33,7 +33,8 @@
           <template v-if="userStore.isLoggedIn">
             <el-dropdown @command="handleCommand">
               <span class="user-dropdown">
-                <el-avatar :size="32" :src="avatarSrc" icon="UserFilled" />
+                <!-- 改用 Store 头像 -->
+                <el-avatar :size="32" :src="userStore.avatarUrl" icon="UserFilled" />
                 <span class="username">{{ userStore.userInfo?.nickname || userStore.userInfo?.username }}</span>
                 <el-icon><ArrowDown /></el-icon>
               </span>
@@ -64,32 +65,19 @@ import { ref, computed, onMounted, onUnmounted, watch, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/store/user'
 import { getUnreadCount } from '@/api/notification'
-import { getUserAvatar } from '@/api/user'
+// 不再需要单独引入 getUserAvatar，已由 Store 管理
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const unreadCount = ref(0)
-const avatarSrc = ref('')
 let pollTimer = null
 
 const activeMenu = computed(() => route.path)
 
-async function loadAvatar() {
-  if (!userStore.userInfo?.userId) return
-  try {
-    const blob = await getUserAvatar(userStore.userInfo.userId)
-    if (avatarSrc.value) {
-      URL.revokeObjectURL(avatarSrc.value)
-    }
-    avatarSrc.value = URL.createObjectURL(blob)
-  } catch {
-    avatarSrc.value = ''
-  }
-}
-
+// 监听用户 ID 变化，自动触发 Store 加载头像
 watch(() => userStore.userInfo?.userId, () => {
-  loadAvatar()
+  userStore.loadAvatar()
 })
 
 async function fetchUnreadCount() {
@@ -118,7 +106,10 @@ function handleCommand(command) {
 
 onMounted(() => {
   fetchUnreadCount()
-  loadAvatar()
+  // 若用户信息已存在，立即从 Store 加载头像
+  if (userStore.userInfo?.userId) {
+    userStore.loadAvatar()
+  }
   pollTimer = setInterval(fetchUnreadCount, 30000)
 })
 
@@ -131,6 +122,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* 样式完全不变 */
 .layout-container {
   min-height: 100vh;
 }

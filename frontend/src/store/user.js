@@ -1,12 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { getMe } from '../api/user'
+import { getMe, getUserAvatar } from '../api/user'
 
 export const useUserStore = defineStore('user', () => {
   const token = ref(localStorage.getItem('token') || '')
   const userInfo = ref(null)
+  const avatarUrl = ref('')  // 全局头像 Object URL
 
-  // [修改] 将函数改为 computed getter，供路由守卫和组件直接访问
   const isLoggedIn = computed(() => !!token.value)
   const isAdmin = computed(() => userInfo.value?.role === 'ADMIN')
   const isApproved = computed(() => userInfo.value?.authStatus === 'APPROVED')
@@ -19,12 +19,12 @@ export const useUserStore = defineStore('user', () => {
   function clearToken() {
     token.value = ''
     userInfo.value = null
+    avatarUrl.value = ''  // 清除头像
     localStorage.removeItem('token')
   }
 
   async function fetchUserInfo() {
     try {
-      // [修改] 直接使用 res，无需再取 .data（拦截器已返回 ApiResponse.data）
       const res = await getMe()
       userInfo.value = res
       return res
@@ -34,5 +34,42 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
-  return { token, userInfo, setToken, clearToken, fetchUserInfo, isLoggedIn, isAdmin, isApproved }
+  // 从后端加载头像（返回 Blob，生成 Object URL）
+  async function loadAvatar() {
+    if (!userInfo.value?.userId) {
+      avatarUrl.value = ''
+      return
+    }
+    try {
+      const blob = await getUserAvatar(userInfo.value.userId)
+      if (avatarUrl.value) {
+        URL.revokeObjectURL(avatarUrl.value)
+      }
+      avatarUrl.value = URL.createObjectURL(blob)
+    } catch {
+      avatarUrl.value = ''
+    }
+  }
+
+  // 直接设置头像（用于上传后立即更新，避免再次请求后端）
+  function updateAvatarUrl(url) {
+    if (avatarUrl.value) {
+      URL.revokeObjectURL(avatarUrl.value)
+    }
+    avatarUrl.value = url
+  }
+
+  return {
+    token,
+    userInfo,
+    avatarUrl,
+    setToken,
+    clearToken,
+    fetchUserInfo,
+    loadAvatar,
+    updateAvatarUrl,
+    isLoggedIn,
+    isAdmin,
+    isApproved
+  }
 })

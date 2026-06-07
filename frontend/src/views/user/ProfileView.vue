@@ -20,7 +20,8 @@
       <template v-if="!isEditing">
         <div class="profile-display">
           <div class="avatar-section">
-            <el-avatar :size="80" :src="avatarSrc" icon="UserFilled" />
+            <!-- 直接使用全局头像 -->
+            <el-avatar :size="80" :src="userStore.avatarUrl" icon="UserFilled" />
           </div>
           <el-descriptions :column="1" border>
             <el-descriptions-item label="用户名">{{ userInfo?.username }}</el-descriptions-item>
@@ -94,7 +95,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
-import { updateProfile, getUserAvatar } from '@/api/user'
+import { updateProfile } from '@/api/user'
 
 const userStore = useUserStore()
 const isEditing = ref(false)
@@ -104,22 +105,7 @@ const avatarUploadRef = ref(null)
 const avatarFile = ref(null)
 const avatarFileList = ref([])
 
-const avatarSrc = ref('')
-
 const userInfo = computed(() => userStore.userInfo)
-
-async function loadAvatar() {
-  if (!userInfo.value?.userId) return
-  try {
-    const blob = await getUserAvatar(userInfo.value.userId)
-    if (avatarSrc.value) {
-      URL.revokeObjectURL(avatarSrc.value)
-    }
-    avatarSrc.value = URL.createObjectURL(blob)
-  } catch {
-    avatarSrc.value = ''
-  }
-}
 
 const authStatusMap = {
   UNVERIFIED: '未认证',
@@ -237,6 +223,7 @@ async function handleSave() {
     hasChange = true
   }
 
+  // 头像
   if (avatarFile.value) {
     fd.append('avatar', avatarFile.value)
     hasChange = true
@@ -251,7 +238,16 @@ async function handleSave() {
   try {
     await updateProfile(fd)
     await userStore.fetchUserInfo()
-    await loadAvatar()
+
+    // 如果上传了新头像，立即更新全局头像（从本地文件生成新 URL）
+    if (avatarFile.value) {
+      const newUrl = URL.createObjectURL(avatarFile.value)
+      userStore.updateAvatarUrl(newUrl)
+    } else {
+      // 没有修改头像，仍从后端同步最新头像（例如后端可能有默认头像或其他场景）
+      await userStore.loadAvatar()
+    }
+
     ElMessage.success('保存成功')
     isEditing.value = false
   } catch {
@@ -262,10 +258,13 @@ async function handleSave() {
 }
 
 onMounted(async () => {
-  if (!userInfo.value) {
+  if (!userStore.userInfo) {
     await userStore.fetchUserInfo()
   }
-  await loadAvatar()
+  // 如果 Store 中还没有头像，则加载
+  if (!userStore.avatarUrl && userStore.userInfo?.userId) {
+    await userStore.loadAvatar()
+  }
 })
 </script>
 
