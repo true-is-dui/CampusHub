@@ -15,13 +15,10 @@
             <el-menu-item index="/publish">发布代取</el-menu-item>
             <el-menu-item index="/my-pickups">我的代取</el-menu-item>
             <el-menu-item index="/notifications">
-              通知
-              <el-badge
-                  v-if="unreadCount > 0"
-                  :value="unreadCount"
-                  :max="99"
-                  class="notification-badge"
-              />
+              <span class="notification-wrapper">
+                通知
+                <span v-if="unreadCount > 0" class="notification-dot">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
+              </span>
             </el-menu-item>
             <el-menu-item index="/profile">个人中心</el-menu-item>
             <el-menu-item v-if="userStore.isAdmin" index="/admin/verification">
@@ -55,7 +52,7 @@
       </div>
     </el-header>
     <el-main class="layout-main">
-      <router-view />
+      <router-view :key="$route.fullPath" />
     </el-main>
   </el-container>
 </template>
@@ -165,8 +162,25 @@ onUnmounted(() => {
   border-bottom: none;
 }
 
-.notification-badge {
-  margin-left: 4px;
+.notification-wrapper {
+  position: relative;
+  padding-right: 8px;
+}
+
+.notification-dot {
+  position: absolute;
+  top: 12px;
+  right: -10px;
+  min-width: 4px;
+  height: 17px;
+  line-height: 17px;
+  padding: 0 5px;
+  font-size: 12px;
+  color: #fff;
+  background: #f56c6c;
+  border-radius: 10px;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .header-right {

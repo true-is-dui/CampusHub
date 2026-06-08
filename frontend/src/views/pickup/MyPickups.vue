@@ -14,7 +14,6 @@
           @change="onFilterChange"
       >
         <el-option label="全部" value="" />
-        <el-option label="待支付" value="WAITING_PAYMENT" />
         <el-option label="待接单" value="WAITING_ACCEPT" />
         <el-option label="进行中" value="IN_PROGRESS" />
         <el-option label="已完成" value="COMPLETED" />
@@ -46,7 +45,7 @@
             {{ item.itemDescriptionPreview }}
           </div>
           <div class="info-row">
-            <span v-if="item.rewardType === 'PAID'" class="reward">¥{{ item.rewardAmount }}</span>
+            <span v-if="item.rewardType === 'PAID'" class="reward">{{ item.rewardAmount }} 积分</span>
             <span v-else class="reward-free">无报酬</span>
             <span class="time">{{ formatTime(item.createdAt) }}</span>
           </div>
@@ -105,7 +104,6 @@ const campusMap = {
 const campusLabel = (code) => campusMap[code] || code
 
 const statusMap = {
-  WAITING_PAYMENT: '待支付',
   WAITING_ACCEPT: '待接单',
   IN_PROGRESS: '进行中',
   COMPLETED: '已完成',
@@ -114,7 +112,6 @@ const statusMap = {
 
 const cancelReasonMap = {
   USER_CANCELLED: '用户取消',
-  PAYMENT_EXPIRED: '支付超时',
   ACCEPT_DEADLINE_EXPIRED: '接单截止超时',
   SYSTEM_CANCELLED: '系统取消'
 }
@@ -129,7 +126,6 @@ function cancelReasonLabel(reason) {
 
 function getTagType(status) {
   const map = {
-    WAITING_PAYMENT: 'warning',
     WAITING_ACCEPT: 'info',
     IN_PROGRESS: '',
     COMPLETED: 'success',

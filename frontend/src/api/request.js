@@ -51,10 +51,10 @@ function buildErrorInfo(code, reason, defaultMsg) {
       DUPLICATE_OR_CONFLICTED_OPERATION: '操作冲突，请重试',
       ACCEPT_DEADLINE_EXPIRED: '接单截止时间已过，无法接单',
       PICKUP_STATUS_NOT_ALLOWED: '当前订单状态不允许该操作',
-      PICKUP_NOT_WAITING_PAYMENT: '订单不是待支付状态',
       PICKUP_EVALUATION_NOT_ALLOWED: '当前不可评价',
       COMPLETION_PROOF_NOT_AVAILABLE: '完成凭证不可用',
-      VERIFICATION_REVIEW_ALREADY_HANDLED: '该审核已处理'
+      VERIFICATION_REVIEW_ALREADY_HANDLED: '该审核已处理',
+      INSUFFICIENT_POINTS: '积分余额不足，无法发布有报酬代取'
     }
     info.message = reasonMap[reason] || defaultMsg || '操作冲突'
   }

@@ -6,7 +6,6 @@
           placeholder="选择校区"
           clearable
           style="width: 160px"
-          @change="onFilterChange"
       >
         <el-option label="全部校区" value="" />
         <el-option label="鼓楼校区" value="GULOU" />
@@ -19,7 +18,6 @@
           placeholder="报酬类型"
           clearable
           style="width: 150px"
-          @change="onFilterChange"
       >
         <el-option label="全部" value="" />
         <el-option label="有报酬" value="PAID" />
@@ -44,7 +42,7 @@
             </el-tag>
           </div>
           <span v-if="item.rewardType === 'PAID' && item.rewardAmount" class="reward-amount">
-            ¥{{ item.rewardAmount }}
+            {{ item.rewardAmount }} 积分
           </span>
         </div>
         <div class="card-body">
@@ -76,16 +74,11 @@
       </el-card>
     </div>
 
-    <div class="pagination-wrapper">
-      <el-pagination
-          v-model:current-page="pagination.page"
-          v-model:page-size="pagination.pageSize"
-          :total="pagination.total"
-          :page-sizes="[10, 20, 50]"
-          layout="total, sizes, prev, pager, next, jumper"
-          @current-change="loadList"
-          @size-change="onPageSizeChange"
-      />
+    <div v-if="hasMore" class="load-more-wrapper">
+      <el-button :loading="loading" @click="loadMore">加载更多</el-button>
+    </div>
+    <div v-else-if="list.length > 0" class="load-more-wrapper">
+      <span class="no-more-text">没有更多了</span>
     </div>
   </div>
 </template>
@@ -104,11 +97,9 @@ const filters = reactive({
   rewardType: ''
 })
 
-const pagination = reactive({
-  page: 1,
-  pageSize: 20,
-  total: 0
-})
+const page = ref(1)
+const pageSize = 20
+const hasMore = ref(true)
 
 const campusMap = {
   GULOU: '鼓楼校区',
@@ -134,32 +125,39 @@ function formatTime(dateStr) {
 }
 
 function onFilterChange() {
-  pagination.page = 1
+  page.value = 1
+  hasMore.value = true
+  list.value = []
   loadList()
 }
 
-function onPageSizeChange() {
-  pagination.page = 1
-  loadList()
-}
-
-async function loadList() {
+async function loadList(append = false) {
   loading.value = true
   try {
     const params = {
-      page: pagination.page,
-      pageSize: pagination.pageSize
+      page: page.value,
+      pageSize
     }
     if (filters.campus) params.campus = filters.campus
     if (filters.rewardType) params.rewardType = filters.rewardType
     const res = await getPickupList(params)
-    list.value = res?.list || []
-    pagination.total = res?.total || 0
+    const fetched = res?.list || []
+    if (append) {
+      list.value.push(...fetched)
+    } else {
+      list.value = fetched
+    }
+    hasMore.value = fetched.length >= pageSize
   } catch {
     // error handled by interceptor
   } finally {
     loading.value = false
   }
+}
+
+function loadMore() {
+  page.value++
+  loadList(true)
 }
 
 function goDetail(id) {
@@ -190,19 +188,28 @@ onMounted(() => {
 }
 
 .pickup-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  columns: 3;
+  column-gap: 16px;
   min-height: 200px;
 }
 
 .pickup-card {
   cursor: pointer;
   transition: transform 0.2s;
+  break-inside: avoid;
+  margin-bottom: 16px;
 }
 
 .pickup-card:hover {
   transform: translateY(-2px);
+}
+
+@media (max-width: 900px) {
+  .pickup-list { columns: 2; }
+}
+
+@media (max-width: 600px) {
+  .pickup-list { columns: 1; }
 }
 
 .card-header {
@@ -274,9 +281,15 @@ onMounted(() => {
   color: #409eff;
 }
 
-.pagination-wrapper {
+.load-more-wrapper {
   display: flex;
   justify-content: center;
   margin-top: 24px;
+  padding: 16px 0;
+}
+
+.no-more-text {
+  color: #909399;
+  font-size: 14px;
 }
 </style>
