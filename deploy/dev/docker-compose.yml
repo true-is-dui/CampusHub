@@ -18,7 +18,7 @@ services:
       - ./mysql/conf/my.cnf:/etc/mysql/conf.d/my.cnf
 
     healthcheck:
-      test: [ "CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$${MYSQL_ROOT_PASSWORD} --silent" ]
+      test: [ "CMD-SHELL", "mysqladmin ping -h localhost -uroot -p${MYSQL_ROOT_PASSWORD} --silent" ]
       interval: 10s
       timeout: 5s
       retries: 10

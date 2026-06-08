@@ -26,3 +26,7 @@ logs/
 
 # 本地 docker 覆盖
 docker-compose.override.yml
+
+# 用户上传文件（联调/运行时产生，任何目录下均忽略，不进版本库）
+uploads/
+**/uploads/
