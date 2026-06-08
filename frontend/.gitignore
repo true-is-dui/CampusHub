@@ -1,0 +1,24 @@
+# 依赖（前端特有）
+node_modules/
+
+# 构建产物
+dist/
+dist-ssr/
+build/
+
+# Vite 缓存
+.vite/
+.cache/
+
+# 本地环境变量（.env / .env.* 已由根递归忽略，这里仅 local 变体）
+.env.local
+.env.*.local
+
+# 测试覆盖率
+coverage/
+
+# 包管理器 debug 日志
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*

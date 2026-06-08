@@ -1,15 +1,29 @@
+# Maven
 target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
 
-### 本机私有配置（含真实密码，禁止提交）###
+# 本机私有配置（含真实密码，禁止提交）
 application-local.yaml
 application-local.yml
 *-local.yaml
 *-local.yml
 
-### STS ###
+# 上传文件目录（运行时按 backend/ 工作目录生成）
+uploads/
+
+# Java 运行/编译产物
+*.class
+hs_err_pid*
+replay_pid*
+
+# 测试覆盖率
+coverage/
+*.lcov
+*.gcov
+
+# STS / Eclipse
 .apt_generated
 .classpath
 .factorypath
@@ -18,21 +32,8 @@ application-local.yml
 .springBeans
 .sts4-cache
 
-### IntelliJ IDEA ###
-.idea
-*.iws
-*.iml
-*.ipr
-
-### NetBeans ###
+# NetBeans
 /nbproject/private/
 /nbbuild/
-/dist/
 /nbdist/
 /.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
-
-### VS Code ###
-.vscode/
