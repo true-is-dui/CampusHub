@@ -188,7 +188,7 @@ onMounted(() => {
 }
 
 .pickup-list {
-  columns: 2;
+  columns: 3;
   column-gap: 16px;
   min-height: 200px;
 }
@@ -204,7 +204,11 @@ onMounted(() => {
   transform: translateY(-2px);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 900px) {
+  .pickup-list { columns: 2; }
+}
+
+@media (max-width: 600px) {
   .pickup-list { columns: 1; }
 }
 
