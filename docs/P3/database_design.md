@@ -31,11 +31,11 @@
 1. 支撑用户名密码注册登录、个人资料、头像和实名认证状态维护。
 2. 支撑学生提交实名认证材料、管理员审核、审核结果追溯。
 3. 支撑代取请求从发布、待支付、待接单、接单、上传完成凭证、确认完成、取消和超时取消的完整状态流转。
-4. 支撑有报酬代取的支付宝沙箱预付款、关闭、退款和结算记录，保证支付幂等追踪。
+4. 支撑有报酬代取以平台虚拟积分计价：发布时从发布方账户扣减积分、取消时退回、完成后转入接单方账户，并记录积分流水。
 5. 支撑完成后双方互评，并按用户在代取服务中的角色分别统计作为发布方和作为接单方的评价表现。
 6. 支撑站内通知的记录、未读数量查询和已读状态维护，不引入私聊或 WebSocket 消息表。
 7. 支撑头像、认证材料、取件凭证、完成凭证等图片文件的统一元数据记录和上传溯源。
-8. 系统不单独建设数据库审计日志表；关键业务操作、异常原因、支付回调失败、退款/结算异常等通过 Spring Boot 应用日志记录和排查。
+8. 系统不单独建设数据库审计日志表；关键业务操作、异常原因、积分变动异常等通过 Spring Boot 应用日志记录和排查。
 
 ### 2.2 本版数据库范围
 
@@ -43,8 +43,8 @@
 |------|----|------|
 | 用户与认证 | `users`、`verification_reviews` | 注册登录、个人资料、实名信息、认证审核记录 |
 | 文件元数据 | `stored_files` | 头像、认证材料、取件凭证、完成凭证的元数据和上传溯源 |
-| 代取闭环 | `pickup_requests` | 单表承载发布、支付后可接单、接单、完成、取消、超时等业务状态 |
-| 支付记录 | `payment_records` | 记录支付宝沙箱预付款、关闭、退款、结算等状态；代取请求通过唯一的 `payment_id` 指向主支付记录 |
+| 代取闭环 | `pickup_requests` | 单表承载发布、待接单、接单、完成、取消、超时等业务状态 |
+| 积分账户 | `users.point_balance` + `point_transactions` | 用户积分余额存于 `users` 表，`point_transactions` 记录认证赠送、签到、发布扣减、取消退回、完成入账的积分流水 |
 | 评价体系 | `evaluations` | 代取完成后双方互评，通过 `business_type + business_id` 定位评价业务对象，支持按被评价者角色统计 |
 | 站内通知 | `notifications` | 认证、接单、完成凭证、确认完成、评价等业务通知 |
 
@@ -77,7 +77,8 @@
 | `verification_reviews` 与 `stored_files` | 每条实名认证审核记录关联一份认证材料文件 `material_file_id`。 |
 | `users` 与 `pickup_requests` | 用户可作为发布方发布多个代取请求，也可作为接单方承接多个代取请求。 |
 | `pickup_requests` 与 `stored_files` | 代取请求通过 `pickup_credential_file_id` 引用取件凭证，通过 `completion_proof_file_id` 引用完成凭证。 |
-| `pickup_requests` 与 `payment_records` | 有报酬代取请求可通过 `payment_id` 关联一条主支付记录；`payment_id` 唯一约束保证一条主支付记录只属于一个代取请求；支付记录侧仅保存业务追踪字段，不反向约束代取请求。 |
+| `users` 与 `point_transactions` | 一个用户可有多条积分流水；流水记录认证赠送、签到、发布扣减、取消退回、完成入账等积分变动，并冗余记录变动后余额。用户当前积分余额存于 `users.point_balance`。 |
+| `pickup_requests` 与 `point_transactions` | 有报酬代取的发布扣减、取消退回、完成入账流水通过 `point_transactions.related_pickup_id` 关联代取请求，仅用于流水溯源，不反向约束代取请求。 |
 | `pickup_requests` 与 `evaluations` | 评价通过 `business_type=PICKUP_REQUEST` 和 `business_id=pickup_requests.id` 定位代取请求，不额外写死代取请求外键。 |
 | `users` 与 `evaluations` | 用户既可能是评价者，也可能是被评价者；统计时按被评价者在代取服务中的角色区分。 |
 | `users` 与 `notifications` | 一个用户可接收多条站内通知。 |
@@ -86,13 +87,12 @@
 
 本版不恢复旧版 `errand_tasks + orders` 双表模型。`pickup_requests` 是代取业务主表，统一维护以下状态：
 
-1. `WAITING_PAYMENT`：有报酬代取已发布，等待发布方在 3 分钟内完成支付宝沙箱预付款。
-2. `WAITING_ACCEPT`：服务可展示在代取需求大厅，等待其他认证用户接单。
-3. `IN_PROGRESS`：已有接单方承接服务，等待上传完成凭证和发布方确认。
-4. `COMPLETED`：发布方确认完成，业务终态。
-5. `CANCELLED`：发布方取消、支付超时、接单截止超时或系统取消，业务终态。
+1. `WAITING_ACCEPT`：服务可展示在代取需求大厅，等待其他认证用户接单。有报酬代取在发布时已从发布方账户扣减积分，发布成功即进入此状态。
+2. `IN_PROGRESS`：已有接单方承接服务，等待上传完成凭证和发布方确认。
+3. `COMPLETED`：发布方确认完成，业务终态。有报酬代取在此时将积分转入接单方账户。
+4. `CANCELLED`：发布方取消、接单截止超时或系统取消，业务终态。有报酬代取在 `WAITING_ACCEPT` 阶段取消时将积分退回发布方账户。
 
-支付状态由 `payment_records` 维护，代取业务状态仍以 `pickup_requests.status` 为准。支付模块不直接理解或改写代取状态。支付超时处理由后端根据 `payment_records.expire_at` 和支付状态完成，再由代取服务模块将代取请求流转为取消。
+积分余额变动由业务层在发布、取消、完成时同步完成（扣减/退回/转入），并写入 `point_transactions` 流水。代取业务状态以 `pickup_requests.status` 为准；积分模块不直接改写代取状态。
 
 ---
 
@@ -107,13 +107,14 @@ erDiagram
     users ||--o{ evaluations : writes
     users ||--o{ evaluations : receives
     users ||--o{ notifications : receives
+    users ||--o{ point_transactions : owns
 
     stored_files ||--o{ users : avatar_file
     stored_files ||--o{ verification_reviews : material_file
     stored_files ||--o{ pickup_requests : pickup_credential
     stored_files ||--o{ pickup_requests : completion_proof
 
-    pickup_requests ||--o| payment_records : main_payment
+    pickup_requests ||--o{ point_transactions : related_pickup
 
     users {
         BIGINT id PK
@@ -125,6 +126,8 @@ erDiagram
         VARCHAR real_name
         VARCHAR auth_status
         VARCHAR role
+        BIGINT point_balance
+        DATE last_check_in_date
         DATETIME created_at
         DATETIME updated_at
     }
@@ -158,7 +161,8 @@ erDiagram
         BIGINT id PK
         BIGINT publisher_id FK
         BIGINT acceptor_id FK
-        BIGINT payment_id FK
+        VARCHAR reward_type
+        DECIMAL reward_amount
         BIGINT pickup_credential_file_id FK
         BIGINT completion_proof_file_id FK
         VARCHAR status
@@ -169,19 +173,14 @@ erDiagram
         DATETIME cancelled_at
     }
 
-    payment_records {
+    point_transactions {
         BIGINT id PK
-        BIGINT payer_id FK
-        BIGINT receiver_id FK
-        VARCHAR out_trade_no UK
-        VARCHAR trade_no
-        VARCHAR business_type
-        VARCHAR business_trace_no UK
-        VARCHAR status
-        DATETIME expire_at
-        DATETIME paid_at
-        DATETIME refunded_at
-        DATETIME settled_at
+        BIGINT user_id FK
+        VARCHAR type
+        BIGINT amount
+        BIGINT balance_after
+        BIGINT related_pickup_id
+        DATETIME created_at
     }
 
     evaluations {
@@ -230,6 +229,8 @@ erDiagram
 | `contact` | `VARCHAR(100)` | 是 | `NULL` |  | 用户主动填写的公开联系方式，选填 |
 | `auth_status` | `VARCHAR(20)` | 否 | `UNVERIFIED` | 枚举约束 | `UNVERIFIED`、`REVIEWING`、`APPROVED`、`REJECTED` |
 | `role` | `VARCHAR(20)` | 否 | `USER` | 枚举约束 | `USER`、`ADMIN` |
+| `point_balance` | `BIGINT` | 否 | `0` |  | 平台积分余额，纯虚拟、不可充值提现；认证赠送、签到、代取流转时由业务层维护 |
+| `last_check_in_date` | `DATE` | 是 | `NULL` |  | 最近一次签到日期，用于每日签到去重 |
 | `created_at` | `DATETIME` | 否 | `CURRENT_TIMESTAMP` |  | 注册时间 |
 | `updated_at` | `DATETIME` | 否 | `CURRENT_TIMESTAMP` | 自动更新 | 更新时间 |
 
@@ -290,9 +291,8 @@ erDiagram
 | `reward_amount` | `DECIMAL(10,2)` | 是 | `NULL` |  | 有报酬服务金额，范围 1-200；无报酬为空 |
 | `pickup_credential_file_id` | `BIGINT` | 否 | 无 | FK -> `stored_files.id` | 取件凭证文件；接单前不向非发布方展示 |
 | `completion_proof_file_id` | `BIGINT` | 是 | `NULL` | FK -> `stored_files.id` | 完成凭证文件；接单方上传 |
-| `payment_id` | `BIGINT` | 是 | `NULL` | FK -> `payment_records.id`；UK | 支付记录 ID；无报酬服务为空；唯一约束保证一条主支付记录只属于一个代取请求 |
-| `status` | `VARCHAR(30)` | 否 | 无 | 枚举约束 | `WAITING_PAYMENT`、`WAITING_ACCEPT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED` |
-| `cancel_reason` | `VARCHAR(40)` | 是 | `NULL` | 枚举约束 | `USER_CANCELLED`、`PAYMENT_EXPIRED`、`ACCEPT_DEADLINE_EXPIRED`、`SYSTEM_CANCELLED` |
+| `status` | `VARCHAR(30)` | 否 | 无 | 枚举约束 | `WAITING_ACCEPT`、`IN_PROGRESS`、`COMPLETED`、`CANCELLED` |
+| `cancel_reason` | `VARCHAR(40)` | 是 | `NULL` | 枚举约束 | `USER_CANCELLED`、`ACCEPT_DEADLINE_EXPIRED`、`SYSTEM_CANCELLED` |
 | `cancel_detail` | `VARCHAR(500)` | 是 | `NULL` |  | 发布方主动取消时填写的补充说明，对应 API `ReasonRequest.reason` |
 | `accept_deadline` | `DATETIME` | 否 | 无 |  | 接单截止时间，对应 API `acceptDeadline` |
 | `accepted_at` | `DATETIME` | 是 | `NULL` |  | 接单时间 |
@@ -301,36 +301,24 @@ erDiagram
 | `created_at` | `DATETIME` | 否 | `CURRENT_TIMESTAMP` |  | 发布时间 |
 | `updated_at` | `DATETIME` | 否 | `CURRENT_TIMESTAMP` | 自动更新 | 更新时间 |
 
-### 5.5 `payment_records` 支付记录表
+### 5.5 `point_transactions` 积分流水表
 
-支付记录不保存指向具体代取请求的反向业务外键，也不反向约束代取请求。有报酬代取请求通过 `pickup_requests.payment_id -> payment_records.id` 指向一条主支付记录；无报酬代取请求不关联支付记录。`payment_records.business_type`、`business_trace_no` 只用于支付追踪、幂等、支付宝沙箱回调定位和异常排查，不是指向具体业务表的外键。`out_trade_no` 必须唯一，用于支付宝沙箱回调匹配和幂等处理。
+`point_transactions` 记录用户每一笔积分变动，用于「我的积分」流水展示和审计追溯。用户当前积分余额存于 `users.point_balance`；流水表冗余记录每次变动后的余额 `balance_after`，便于直接展示历史，不需要回放计算。积分为平台内虚拟资产，不可充值提现，故不涉及第三方交易号、商户订单号等支付字段。
 
-本版 `payment_records` 记录主支付单当前状态及关键时间点，不单独拆分支付流水表；用户支付、退款、结算记录列表由业务层根据用户角色、支付状态和关键时间字段生成。若后续需要完整资金流水，再扩展 `payment_events` 或 `transaction_records`。
+有报酬代取的积分变动由代取服务在发布、取消、完成时同步写入：发布扣减（`SPEND_PUBLISH`，负数）、取消退回（`REFUND_CANCEL`，正数）、完成入账（`INCOME_COMPLETE`，正数）；认证赠送（`EARN_VERIFICATION`）和每日签到（`EARN_CHECK_IN`）由用户模块写入。`related_pickup_id` 仅用于代取相关流水的溯源，非代取流水为空，不建立业务外键约束。
 
 | 字段名 | 类型 | 是否为空 | 默认值 | 约束 | 说明 |
 |--------|------|----------|--------|------|------|
-| `id` | `BIGINT` | 否 | 自增 | PK | 支付记录 ID，对应 API `paymentId` |
-| `payer_id` | `BIGINT` | 否 | 无 | FK -> `users.id` | 付款方，代取发布方 |
-| `receiver_id` | `BIGINT` | 是 | `NULL` | FK -> `users.id` | 收款方，接单方；结算前可为空 |
-| `business_type` | `VARCHAR(40)` | 否 | `PICKUP_REQUEST` | 枚举约束 | 当前仅 `PICKUP_REQUEST`；支付追踪字段，不是业务外键 |
-| `business_trace_no` | `VARCHAR(80)` | 否 | 无 | UK | 业务追踪号，用于幂等、日志、回调定位和异常排查；不是业务外键 |
-| `amount` | `DECIMAL(10,2)` | 否 | 无 |  | 支付金额，单位元 |
-| `out_trade_no` | `VARCHAR(64)` | 否 | 无 | UK | 商户订单号，必须唯一 |
-| `trade_no` | `VARCHAR(128)` | 是 | `NULL` | 普通索引 | 第三方交易号，支付宝沙箱回调返回 |
-| `status` | `VARCHAR(30)` | 否 | `WAITING_PAY` | 枚举约束 | `WAITING_PAY`、`PAID`、`CLOSED`、`REFUNDED`、`SETTLED` |
-| `pay_entry` | `TEXT` | 是 | `NULL` |  | 支付入口/支付链接，由后端保存并通过 `payment-entry` 接口返回 |
-| `expire_at` | `DATETIME` | 否 | 无 |  | 支付过期时间；当前 MVP 为创建后 3 分钟 |
-| `paid_at` | `DATETIME` | 是 | `NULL` |  | 支付成功时间 |
-| `refunded_at` | `DATETIME` | 是 | `NULL` |  | 退款成功时间 |
-| `settled_at` | `DATETIME` | 是 | `NULL` |  | 结算/转账成功时间 |
-| `closed_at` | `DATETIME` | 是 | `NULL` |  | 待支付关闭时间 |
-| `close_reason` | `VARCHAR(100)` | 是 | `NULL` |  | 关闭原因，例如发布方取消或支付超时 |
-| `failure_reason` | `VARCHAR(500)` | 是 | `NULL` |  | 第三方支付失败或内部处理失败说明 |
-| `status_changed_at` | `DATETIME` | 否 | `CURRENT_TIMESTAMP` |  | 最近一次支付状态变化时间 |
+| `id` | `BIGINT` | 否 | 自增 | PK | 流水 ID，对应 API `transactionId` |
+| `user_id` | `BIGINT` | 否 | 无 | FK -> `users.id` | 流水所属用户 |
+| `type` | `VARCHAR(30)` | 否 | 无 | 枚举约束 | `EARN_VERIFICATION`、`EARN_CHECK_IN`、`SPEND_PUBLISH`、`REFUND_CANCEL`、`INCOME_COMPLETE` |
+| `amount` | `BIGINT` | 否 | 无 |  | 积分变动量，正数为入账，负数为出账（发布扣减） |
+| `balance_after` | `BIGINT` | 否 | 无 |  | 本次变动后的积分余额，冗余记录便于展示 |
+| `related_pickup_id` | `BIGINT` | 是 | `NULL` |  | 关联代取请求 ID；非代取相关流水为空；仅用于溯源，不建业务外键 |
 | `created_at` | `DATETIME` | 否 | `CURRENT_TIMESTAMP` |  | 创建时间 |
 | `updated_at` | `DATETIME` | 否 | `CURRENT_TIMESTAMP` | 自动更新 | 更新时间 |
 
-> 支付超时由后端定时任务或业务访问时状态检查处理。前端只展示后端返回的 `expire_at` 和支付状态，不直接决定支付是否过期。支付失败、回调失败、退款或结算异常通过 `failure_reason` 或 Spring Boot 应用日志记录，不作为稳定支付状态。
+> 积分流水只记录稳定的成功变动；积分不足导致的发布失败不写流水，由业务层返回业务错误。认证赠送每个学号仅一次，由业务层在认证通过时校验；每日签到去重由 `users.last_check_in_date` 保证。
 
 ### 5.6 `evaluations` 评价表
 
@@ -384,12 +372,15 @@ CREATE TABLE users (
     contact VARCHAR(100) NULL COMMENT '用户主动填写的公开联系方式，选填',
     auth_status VARCHAR(20) NOT NULL DEFAULT 'UNVERIFIED' COMMENT 'UNVERIFIED/REVIEWING/APPROVED/REJECTED',
     role VARCHAR(20) NOT NULL DEFAULT 'USER' COMMENT 'USER/ADMIN',
+    point_balance BIGINT NOT NULL DEFAULT 0 COMMENT '平台积分余额，纯虚拟、不可充值提现',
+    last_check_in_date DATE NULL COMMENT '最近一次签到日期，用于每日签到去重',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT uk_users_username UNIQUE (username),
     CONSTRAINT uk_users_student_id UNIQUE (student_id),
     CONSTRAINT chk_users_auth_status CHECK (auth_status IN ('UNVERIFIED','REVIEWING','APPROVED','REJECTED')),
     CONSTRAINT chk_users_role CHECK (role IN ('USER','ADMIN')),
+    CONSTRAINT chk_users_point_balance CHECK (point_balance >= 0),
     INDEX idx_users_auth_status (auth_status),
     INDEX idx_users_role (role),
     INDEX idx_users_created_at (created_at)
@@ -442,39 +433,6 @@ CREATE TABLE verification_reviews (
     INDEX idx_verification_reviews_reviewer (reviewer_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='实名认证审核记录表';
 
-CREATE TABLE payment_records (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    payer_id BIGINT NOT NULL COMMENT '付款方，代取发布方',
-    receiver_id BIGINT NULL COMMENT '收款方，代取接单方，结算前可为空',
-    business_type VARCHAR(40) NOT NULL DEFAULT 'PICKUP_REQUEST' COMMENT '当前仅PICKUP_REQUEST，仅用于支付追踪',
-    business_trace_no VARCHAR(80) NOT NULL COMMENT '业务追踪号，用于幂等、回调定位和异常排查',
-    amount DECIMAL(10,2) NOT NULL COMMENT '支付金额，单位元',
-    out_trade_no VARCHAR(64) NOT NULL COMMENT '商户订单号，必须唯一',
-    trade_no VARCHAR(128) NULL COMMENT '第三方交易号',
-    status VARCHAR(30) NOT NULL DEFAULT 'WAITING_PAY' COMMENT 'WAITING_PAY/PAID/CLOSED/REFUNDED/SETTLED',
-    pay_entry TEXT NULL COMMENT '支付宝沙箱支付入口',
-    expire_at DATETIME NOT NULL COMMENT '支付过期时间',
-    paid_at DATETIME NULL COMMENT '支付成功时间',
-    refunded_at DATETIME NULL COMMENT '退款成功时间',
-    settled_at DATETIME NULL COMMENT '结算成功时间',
-    closed_at DATETIME NULL COMMENT '待支付关闭时间',
-    close_reason VARCHAR(100) NULL COMMENT '关闭原因',
-    failure_reason VARCHAR(500) NULL COMMENT '失败原因',
-    status_changed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '最近状态变化时间',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT uk_payment_records_out_trade_no UNIQUE (out_trade_no),
-    CONSTRAINT uk_payment_records_business_trace_no UNIQUE (business_trace_no),
-    CONSTRAINT fk_payment_records_payer FOREIGN KEY (payer_id) REFERENCES users(id),
-    CONSTRAINT fk_payment_records_receiver FOREIGN KEY (receiver_id) REFERENCES users(id),
-    CONSTRAINT chk_payment_records_business_type CHECK (business_type IN ('PICKUP_REQUEST')),
-    CONSTRAINT chk_payment_records_status CHECK (status IN ('WAITING_PAY','PAID','CLOSED','REFUNDED','SETTLED')),
-    INDEX idx_payment_records_payer_created (payer_id, created_at),
-    INDEX idx_payment_records_receiver_created (receiver_id, created_at),
-    INDEX idx_payment_records_status_expire (status, expire_at),
-    INDEX idx_payment_records_trade_no (trade_no)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='支付记录表';
-
 CREATE TABLE pickup_requests (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     publisher_id BIGINT NOT NULL COMMENT '发布方用户ID',
@@ -487,9 +445,8 @@ CREATE TABLE pickup_requests (
     reward_amount DECIMAL(10,2) NULL COMMENT '有报酬金额，1-200元；无报酬为空',
     pickup_credential_file_id BIGINT NOT NULL COMMENT '取件凭证文件ID',
     completion_proof_file_id BIGINT NULL COMMENT '完成凭证文件ID',
-    payment_id BIGINT NULL COMMENT '支付记录ID；无报酬为空',
-    status VARCHAR(30) NOT NULL COMMENT 'WAITING_PAYMENT/WAITING_ACCEPT/IN_PROGRESS/COMPLETED/CANCELLED',
-    cancel_reason VARCHAR(40) NULL COMMENT 'USER_CANCELLED/PAYMENT_EXPIRED/ACCEPT_DEADLINE_EXPIRED/SYSTEM_CANCELLED',
+    status VARCHAR(30) NOT NULL COMMENT 'WAITING_ACCEPT/IN_PROGRESS/COMPLETED/CANCELLED',
+    cancel_reason VARCHAR(40) NULL COMMENT 'USER_CANCELLED/ACCEPT_DEADLINE_EXPIRED/SYSTEM_CANCELLED',
     cancel_detail VARCHAR(500) NULL COMMENT '取消补充说明',
     accept_deadline DATETIME NOT NULL COMMENT '接单截止时间',
     accepted_at DATETIME NULL COMMENT '接单时间',
@@ -501,11 +458,9 @@ CREATE TABLE pickup_requests (
     CONSTRAINT fk_pickup_requests_acceptor FOREIGN KEY (acceptor_id) REFERENCES users(id),
     CONSTRAINT fk_pickup_requests_pickup_file FOREIGN KEY (pickup_credential_file_id) REFERENCES stored_files(id),
     CONSTRAINT fk_pickup_requests_completion_file FOREIGN KEY (completion_proof_file_id) REFERENCES stored_files(id),
-    CONSTRAINT fk_pickup_requests_payment FOREIGN KEY (payment_id) REFERENCES payment_records(id),
-    CONSTRAINT uk_pickup_requests_payment_id UNIQUE (payment_id),
     CONSTRAINT chk_pickup_requests_reward_type CHECK (reward_type IN ('PAID','UNPAID')),
-    CONSTRAINT chk_pickup_requests_status CHECK (status IN ('WAITING_PAYMENT','WAITING_ACCEPT','IN_PROGRESS','COMPLETED','CANCELLED')),
-    CONSTRAINT chk_pickup_requests_cancel_reason CHECK (cancel_reason IS NULL OR cancel_reason IN ('USER_CANCELLED','PAYMENT_EXPIRED','ACCEPT_DEADLINE_EXPIRED','SYSTEM_CANCELLED')),
+    CONSTRAINT chk_pickup_requests_status CHECK (status IN ('WAITING_ACCEPT','IN_PROGRESS','COMPLETED','CANCELLED')),
+    CONSTRAINT chk_pickup_requests_cancel_reason CHECK (cancel_reason IS NULL OR cancel_reason IN ('USER_CANCELLED','ACCEPT_DEADLINE_EXPIRED','SYSTEM_CANCELLED')),
     CONSTRAINT chk_pickup_requests_reward_amount CHECK ((reward_type = 'PAID' AND reward_amount BETWEEN 1.00 AND 200.00) OR (reward_type = 'UNPAID' AND reward_amount IS NULL)),
     CONSTRAINT chk_pickup_requests_not_self_accept CHECK (acceptor_id IS NULL OR acceptor_id <> publisher_id),
     INDEX idx_pickup_hall (status, campus, reward_type, created_at),
@@ -557,6 +512,22 @@ CREATE TABLE notifications (
     INDEX idx_notifications_business (business_type, business_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='站内通知表';
 
+CREATE TABLE point_transactions (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL COMMENT '流水所属用户ID',
+    type VARCHAR(30) NOT NULL COMMENT 'EARN_VERIFICATION/EARN_CHECK_IN/SPEND_PUBLISH/REFUND_CANCEL/INCOME_COMPLETE',
+    amount BIGINT NOT NULL COMMENT '积分变动量，正数入账，负数出账',
+    balance_after BIGINT NOT NULL COMMENT '本次变动后的积分余额',
+    related_pickup_id BIGINT NULL COMMENT '关联代取请求ID，仅用于溯源，非代取流水为空',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_point_transactions_user FOREIGN KEY (user_id) REFERENCES users(id),
+    CONSTRAINT chk_point_transactions_type CHECK (type IN ('EARN_VERIFICATION','EARN_CHECK_IN','SPEND_PUBLISH','REFUND_CANCEL','INCOME_COMPLETE')),
+    INDEX idx_point_tx_user_created (user_id, created_at),
+    INDEX idx_point_tx_user_type_created (user_id, type, created_at),
+    INDEX idx_point_tx_related_pickup (related_pickup_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='积分流水表';
+
 ```
 
 ---
@@ -584,32 +555,30 @@ CREATE TABLE notifications (
 
 | 值 | 含义 | 可进入方式 |
 |----|------|------------|
-| `WAITING_PAYMENT` | 有报酬服务已发布，等待预付款 | 发布有报酬代取 |
-| `WAITING_ACCEPT` | 可在大厅展示，等待接单 | 无报酬发布成功；有报酬支付成功 |
+| `WAITING_ACCEPT` | 可在大厅展示，等待接单 | 无报酬发布成功；有报酬发布并扣减发布方积分成功 |
 | `IN_PROGRESS` | 已接单，服务进行中 | 接单成功 |
 | `COMPLETED` | 发布方确认完成 | 上传完成凭证后发布方确认 |
-| `CANCELLED` | 已取消 | 发布方取消、支付超时、接单截止超时、系统取消 |
+| `CANCELLED` | 已取消 | 发布方取消、接单截止超时、系统取消 |
 
 ### 7.4 取消原因 `pickup_requests.cancel_reason`
 
 | 值 | 含义 | 说明 |
 |----|------|------|
-| `USER_CANCELLED` | 发布方主动取消 | 仅允许待支付或待接单状态 |
-| `PAYMENT_EXPIRED` | 支付超时取消 | 有报酬服务 3 分钟内未完成预付款 |
+| `USER_CANCELLED` | 发布方主动取消 | 仅允许待接单状态 |
 | `ACCEPT_DEADLINE_EXPIRED` | 接单截止超时取消 | 待接单服务超过接单截止时间无人接单 |
 | `SYSTEM_CANCELLED` | 系统取消 | 后端异常处理或人工修正使用，不作为常规业务入口 |
 
-### 7.5 支付状态 `payment_records.status`
+### 7.5 积分流水类型 `point_transactions.type`
 
 | 值 | 含义 | 说明 |
 |----|------|------|
-| `WAITING_PAY` | 待支付 | 已创建支付入口，等待支付宝沙箱付款 |
-| `PAID` | 已支付 | 预付款成功，代取服务可进入待接单 |
-| `CLOSED` | 已关闭 | 待支付未完成付款时由发布方取消或超时关闭 |
-| `REFUNDED` | 已退款 | 已支付服务在待接单阶段取消或接单截止超时后退款 |
-| `SETTLED` | 已结算 | 发布方确认完成后结算给接单方 |
+| `EARN_VERIFICATION` | 实名认证赠送 | 认证通过赠送 100 积分，每个学号仅一次（+100） |
+| `EARN_CHECK_IN` | 每日签到 | 每日首次签到赠送 5 积分（+5） |
+| `SPEND_PUBLISH` | 发布扣减 | 发布有报酬代取时从发布方账户扣减报酬积分（负数） |
+| `REFUND_CANCEL` | 取消退回 | 待接单阶段取消有报酬代取，退回发布方账户（正数） |
+| `INCOME_COMPLETE` | 完成入账 | 发布方确认完成后，报酬积分转入接单方账户（正数） |
 
-支付稳定状态只保留以上五类。支付失败、回调失败、退款异常或结算异常不写入 `payment_records.status` 的稳定枚举，而是通过 `failure_reason` 或 Spring Boot 应用日志记录，便于用户重试和后续排查。
+积分流水只记录稳定的成功变动。积分不足导致的发布失败、当日重复签到等不写流水，由业务层返回业务错误。
 
 ### 7.6 文件用途 `stored_files.file_usage`
 
@@ -642,7 +611,7 @@ CREATE TABLE notifications (
 | `SYSTEM` | 系统通知 | 通用系统提示 |
 | `VERIFICATION` | 实名认证通知 | 认证通过/驳回 |
 | `PICKUP` | 代取业务通知 | 被接单、完成凭证上传、确认完成 |
-| `PAYMENT` | 支付通知 | 支付成功、关闭、退款、结算 |
+| `PAYMENT` | 积分/报酬通知 | 积分入账、退回（如完成结款、取消退回） |
 | `EVALUATION` | 评价通知 | 收到评价 |
 
 ---
@@ -656,13 +625,13 @@ CREATE TABLE notifications (
 5. `stored_files.uploader_id` 关联上传者，但不表示最终业务权限；`stored_files.business_type`、`business_id` 只是上传溯源字段，不建立具体业务外键。
 6. `pickup_requests.publisher_id` 和 `acceptor_id` 均关联 `users.id`；`acceptor_id <> publisher_id` 通过 CHECK 约束和业务层双重保证。
 7. `pickup_requests.pickup_credential_file_id` 和 `completion_proof_file_id` 分别关联取件凭证和完成凭证文件。
-8. `pickup_requests.payment_id` 关联 `payment_records.id`；无报酬服务为空。这是代取请求到主支付记录的真实外键。外键只保证支付记录存在，唯一约束 `uk_pickup_requests_payment_id` 保证一条主支付记录只属于一个代取请求；MySQL 唯一约束允许多个 `NULL`，不影响无报酬代取请求。
-9. `payment_records.business_type`、`business_trace_no` 仅用于支付追踪、幂等、回调定位和异常排查，不反向约束 `pickup_requests`；`out_trade_no` 唯一保证支付宝回调幂等。
+8. `users.point_balance` 保存用户当前积分余额，`CHECK (point_balance >= 0)` 保证余额非负；积分变动由业务层在认证、签到、发布、取消、完成时同步维护。`users.last_check_in_date` 用于每日签到去重。
+9. `point_transactions.user_id` 关联流水所属用户；`related_pickup_id` 仅用于代取相关流水的溯源，非代取流水为空，不建立业务外键；流水的 `amount`、`balance_after` 记录每次变动量和变动后余额。
 10. `evaluations.business_type + business_id + reviewer_id` 唯一，保证同一业务对象中同一评价者只能评价一次；当前 `business_type=PICKUP_REQUEST` 且 `business_id` 对应代取请求 ID。
 11. `notifications.receiver_id` 关联接收用户；站内通知不设计发送者外键，业务模块通过 `business_type + business_id` 回溯上下文。
 
 > MySQL 8.x 支持 `CHECK` 约束，但实际业务仍应在 Service 层进行参数校验和状态校验，数据库约束用于最后一道防线。
-> 代取支付关联采用业务层约束：`reward_type = 'PAID'` 的有报酬代取应关联支付记录，`reward_type = 'UNPAID'` 的无报酬代取不关联支付记录。本版暂不增加 `reward_type` 与 `payment_id` 的复杂 `CHECK` 约束，由 Service 层校验。
+> 代取报酬采用业务层约束：`reward_type = 'PAID'` 的有报酬代取在发布时从发布方账户扣减 `reward_amount` 对应积分（金额范围 1-200），`reward_type = 'UNPAID'` 的无报酬代取不涉及积分。积分扣减、退回、转入与代取状态变更在同一事务内完成，由 Service 层保证一致性。
 
 ---
 
@@ -680,12 +649,8 @@ CREATE TABLE notifications (
 | `pickup_requests` | `idx_pickup_publisher_status` | “我的发布”按状态查询 |
 | `pickup_requests` | `idx_pickup_acceptor_status` | “我的接单”按状态查询 |
 | `pickup_requests` | `idx_pickup_accept_deadline` | 定时任务扫描待接单超时 |
-| `pickup_requests` | `uk_pickup_requests_payment_id` | 通过代取请求定位主支付记录，并防止一条主支付记录被多个代取请求复用 |
-| `payment_records` | `uk_payment_records_out_trade_no` | 支付宝沙箱回调匹配和幂等处理 |
-| `payment_records` | `uk_payment_records_business_trace_no` | 支付追踪、幂等和异常排查 |
-| `payment_records` | `idx_payment_records_status_expire` | 扫描待支付过期记录 |
-| `payment_records` | `idx_payment_records_payer_created` | 查询我的付款/交易记录 |
-| `payment_records` | `idx_payment_records_receiver_created` | 查询我的收款/结算记录 |
+| `point_transactions` | `idx_point_tx_user_created` | 查询「我的积分」流水，按时间倒序分页 |
+| `point_transactions` | `idx_point_tx_user_type_created` | 按流水类型筛选查询用户积分记录 |
 | `evaluations` | `uk_evaluations_once` | 防止同一评价者重复评价同一业务对象 |
 | `evaluations` | `idx_evaluations_reviewee_role_created` | 查询用户收到的评价，并按发布方/接单方角色统计 |
 | `notifications` | `idx_notifications_receiver_read_created` | 查询未读通知数量和通知列表 |
@@ -701,9 +666,9 @@ CREATE TABLE notifications (
 5. **文件访问边界：** `stored_files` 只保存元数据和上传溯源，不判断访问权限；`business_type`、`business_id` 不作为权限依据、不建立业务外键。文件读取必须经过用户模块、实名审核模块或代取服务模块。
 6. **取件凭证保护：** 取件凭证 `pickup_credential_file_id` 不在代取详情 API 中直接返回；接单成功后接单方可通过受保护接口读取，发布方可读取自己上传的凭证。
 7. **完成凭证保护：** 完成凭证仅服务发布方和接单方可读取，非参与者禁止访问。
-8. **支付信息保护：** 普通支付详情不暴露支付宝交易号、业务追踪号和支付入口；支付入口只通过待支付代取请求的受保护接口返回给发布方。
+8. **积分信息保护：** 积分余额和流水仅当前用户本人可查询自己的记录；积分为平台内虚拟资产，不可充值提现，不涉及第三方交易号或资金账户信息。
 9. **联系方式展示：** `contact` 是用户主动填写的公开资料；未填写时不展示。
-10. **应用日志：** 系统不单独建设数据库审计日志表；登录、实名认证、发布代取、支付回调、接单、上传凭证、确认完成、取消、退款、结算、评价和通知等关键业务操作、异常原因、支付回调失败、退款/结算异常通过 Spring Boot 应用日志记录和排查。
+10. **应用日志：** 系统不单独建设数据库审计日志表；登录、实名认证、发布代取、接单、上传凭证、确认完成、取消、积分变动、评价和通知等关键业务操作、异常原因通过 Spring Boot 应用日志记录和排查。
 
 ---
 
@@ -719,21 +684,21 @@ CREATE TABLE notifications (
 | FR-UM-06 管理员审核实名认证 | `verification_reviews.status`、`reviewer_id`、`reject_reason`、`reviewed_at`；审核通过后业务层同步到 `users.student_id`、`users.real_name` |
 | FR-HALL-01~06 代取大厅 | `pickup_requests.status/campus/reward_type/created_at` 复合索引 |
 | FR-PU-01 发布代取字段 | `pickup_requests.campus`、`pickup_location`、`delivery_location`、`item_description`、`pickup_credential_file_id`、`reward_type`、`reward_amount`、`accept_deadline` |
-| FR-PU-03 有报酬待支付 | `pickup_requests.status=WAITING_PAYMENT`、`payment_records.status=WAITING_PAY`、`expire_at` |
+| FR-PU-03 有报酬发布扣减积分 | `pickup_requests.status=WAITING_ACCEPT`、`users.point_balance` 扣减、`point_transactions.type=SPEND_PUBLISH` |
 | FR-PU-04 无报酬待接单 | `pickup_requests.reward_type=UNPAID`、`status=WAITING_ACCEPT` |
 | FR-PU-05 接单 | `pickup_requests.acceptor_id`、`accepted_at`、`status=IN_PROGRESS` |
 | FR-PU-07 上传完成凭证 | `pickup_requests.completion_proof_file_id`、`stored_files.file_usage=COMPLETION_PROOF` |
-| FR-PU-08 确认完成和结算 | `pickup_requests.completed_at/status=COMPLETED`、`payment_records.status=SETTLED`、`settled_at` |
-| FR-PU-09~10 取消和退款 | `pickup_requests.cancel_reason/cancelled_at`、`payment_records.status=CLOSED/REFUNDED` |
+| FR-PU-08 确认完成和结款 | `pickup_requests.completed_at/status=COMPLETED`、`users.point_balance` 转入接单方、`point_transactions.type=INCOME_COMPLETE` |
+| FR-PU-09~10 取消和退回 | `pickup_requests.cancel_reason/cancelled_at`、`users.point_balance` 退回发布方、`point_transactions.type=REFUND_CANCEL` |
 | FR-PU-12 我的代取记录 | `pickup_requests.publisher_id`、`acceptor_id`、`status` 索引 |
 | FR-CR-01~04 双方互评与好评率 | `evaluations.business_type/business_id/reviewer_id/reviewee_id/reviewee_role/rating_level`，好评率和评价统计动态聚合计算 |
 | FR-NT-01~02 站内通知 | `notifications`、`is_read`、`read_at` |
+| 积分赠送与签到 | `users.point_balance`、`users.last_check_in_date`、`point_transactions.type=EARN_VERIFICATION/EARN_CHECK_IN` |
 | P2 文件模块边界 | `stored_files` 只存元数据和上传溯源，权限由业务模块判断，溯源字段不作为业务外键 |
-| P2 支付模块边界 | `payment_records` 保存支付状态和追踪字段，代取状态由 `pickup_requests` 维护；代取请求通过 `payment_id` 指向主支付记录 |
+| P2 积分模块边界 | `users.point_balance` 保存余额，`point_transactions` 记录流水；积分为平台内虚拟资产，不可充值提现，代取状态由 `pickup_requests` 维护 |
 | P3 `User.avatarFileId` | `users.avatar_file_id` |
-| P3 `PickupRequest.paymentId` | `pickup_requests.payment_id` |
-| P3 `PaymentRecord.outTradeNo` | `payment_records.out_trade_no` 唯一 |
-| P3 `PaymentRecord.businessType/businessTraceNo` | `payment_records.business_type`、`business_trace_no`，仅用于追踪和幂等，不作为业务外键 |
+| P3 `User.pointBalance` | `users.point_balance` |
+| P3 `PointTransaction.type/amount/balanceAfter` | `point_transactions.type`、`amount`、`balance_after` |
 | P3 `Evaluation.businessType/businessId` | `evaluations.business_type`、`business_id` |
 | API `PickupCancelReason` | `pickup_requests.cancel_reason` |
 | API `NotificationItem.readStatus` | `notifications.is_read` 转换为 `UNREAD`/`READ` |
@@ -748,24 +713,24 @@ CREATE TABLE notifications (
 
 1. 是否删除旧版失物招领、搭子、二手、问答、评论、私聊、封禁申诉等非当前范围表。
 2. 是否用 `pickup_requests` 作为代取业务主表，避免恢复旧版 `errand_tasks + orders` 双表模型。
-3. 是否覆盖当前 API 的核心接口：注册登录、用户资料、实名认证、审核、代取大厅、发布、支付入口、接单、凭证、确认完成、取消、评价、通知、支付记录。
+3. 是否覆盖当前 API 的核心接口：注册登录、用户资料、实名认证、审核、代取大厅、发布、接单、凭证、确认完成、取消、评价、通知、积分余额与流水。
 4. 是否体现文件元数据表只做上传溯源，不负责业务权限判断。
-5. 是否避免把支付、评价和文件的追踪字段误建为双向外键或业务强关系。
-6. 是否用唯一约束和索引支撑学号唯一、支付幂等、重复评价拦截、代取大厅查询和超时扫描。
+5. 是否避免把评价和文件的追踪字段误建为双向外键或业务强关系。
+6. 是否用唯一约束和索引支撑学号唯一、重复评价拦截、代取大厅查询、积分流水查询和超时扫描。
 
 ### 12.2 审查结论
 
 #### 12.2.1 第三范式检查说明
 
-AI 辅助审查确认，当前数据库整体按用户、实名认证审核、文件元数据、代取主业务、支付记录、评价和通知等职责拆分，大部分非主键字段都直接描述本表主对象，整体基本满足第三范式要求。好评率和评价统计统一从 `evaluations` 动态聚合计算，不在 `users` 表缓存，避免评价统计冗余。
+AI 辅助审查确认，当前数据库整体按用户、实名认证审核、文件元数据、代取主业务、积分流水、评价和通知等职责拆分，大部分非主键字段都直接描述本表主对象，整体基本满足第三范式要求。好评率和评价统计统一从 `evaluations` 动态聚合计算，不在 `users` 表缓存，避免评价统计冗余。积分余额 `users.point_balance` 由业务层在每次流水写入时同步维护，`point_transactions.balance_after` 是为直接展示历史余额而保留的合理冗余。
 
-少数快照、追踪和扩展字段具有明确业务语义，不属于无意义冗余：`verification_reviews.submitted_student_id`、`submitted_real_name` 保存当次实名认证申请提交快照，用于管理员审核和历史追溯；`stored_files.business_type`、`business_id` 是文件上传溯源字段；`payment_records.business_type`、`business_trace_no` 用于支付幂等、回调定位和异常排查；`evaluations.business_type`、`business_id` 是为评价体系后续扩展保留的多态业务定位字段。这些字段不作为重复主数据使用，也不应错误理解为双向外键或业务强关系。
+少数快照、追踪和扩展字段具有明确业务语义，不属于无意义冗余：`verification_reviews.submitted_student_id`、`submitted_real_name` 保存当次实名认证申请提交快照，用于管理员审核和历史追溯；`stored_files.business_type`、`business_id` 是文件上传溯源字段；`point_transactions.related_pickup_id` 是积分流水的代取溯源字段；`evaluations.business_type`、`business_id` 是为评价体系后续扩展保留的多态业务定位字段。这些字段不作为重复主数据使用，也不应错误理解为双向外键或业务强关系。
 
 #### 12.2.2 潜在性能瓶颈检查说明
 
-AI 辅助审查确认，在当前 MVP/课程项目数据量下，暂不需要分表、缓存统计表、独立消息队列或复杂归档机制。现有索引已经覆盖手机号登录/登录账号查询、学号唯一校验、实名认证审核查询、代取大厅筛选、我的发布/我的接单记录、支付回调和支付状态查询、超时任务扫描、未读通知查询、评价唯一性与好评率统计等高频路径。
+AI 辅助审查确认，在当前 MVP/课程项目数据量下，暂不需要分表、缓存统计表、独立消息队列或复杂归档机制。现有索引已经覆盖登录账号查询、学号唯一校验、实名认证审核查询、代取大厅筛选、我的发布/我的接单记录、积分流水查询、超时任务扫描、未读通知查询、评价唯一性与好评率统计等高频路径。
 
-后续如果数据量明显增长，可再考虑通知归档、支付事件流水、评价统计缓存等扩展；当前版本不新增日志表、支付流水表、通知归档表，也不改变追踪字段不作为业务外键的边界。
+后续如果数据量明显增长，可再考虑通知归档、积分流水归档、评价统计缓存等扩展；当前版本不新增日志表、通知归档表，也不改变追踪字段不作为业务外键的边界。
 
 | 审查项 | AI 审查结论 | 人工判断与处理 |
 |---|---|---|
@@ -775,17 +740,17 @@ AI 辅助审查确认，在当前 MVP/课程项目数据量下，暂不需要分
 
 | 检查项 | 结论 | 说明 |
 |--------|------|------|
-| 第三范式 | 基本满足 | 用户、文件、代取、支付、评价、通知职责分离；好评率和评价统计统一由 `evaluations` 动态聚合，不在 `users` 表冗余缓存 |
+| 第三范式 | 基本满足 | 用户、文件、代取、积分、评价、通知职责分离；好评率和评价统计统一由 `evaluations` 动态聚合，不在 `users` 表冗余缓存 |
 | 旧业务范围清理 | 通过 | 未保留旧表 `lost_found_items`、`match_recruits`、`match_participants`、`secondhand_items`、`questions`、`comments`、`messages`、`ban_appeals`、`orders`、`errand_tasks` |
 | 实名审核追溯 | 通过 | `verification_reviews` 保存当次提交的学号和姓名快照，`users` 保存当前有效实名信息，二者职责边界清晰 |
-| 代取闭环覆盖 | 通过 | `pickup_requests` 覆盖待支付、待接单、进行中、已完成、已取消和取消原因 |
-| 支付幂等 | 通过 | `out_trade_no` 和 `business_trace_no` 均唯一 |
-| 支付关系边界 | 通过 | 仅保留 `pickup_requests.payment_id -> payment_records.id` 真实外键，并通过 `uk_pickup_requests_payment_id` 保证主支付记录不被多个代取请求复用；支付记录侧追踪字段不反向约束代取请求 |
+| 代取闭环覆盖 | 通过 | `pickup_requests` 覆盖待接单、进行中、已完成、已取消和取消原因 |
+| 积分闭环覆盖 | 通过 | `users.point_balance` + `point_transactions` 覆盖认证赠送、签到、发布扣减、取消退回、完成入账 |
+| 积分一致性 | 需实现层控制 | 余额扣减/退回/转入与代取状态变更在同一事务内完成；余额非负由 `CHECK` 与业务层双重保证 |
 | 文件权限边界 | 通过 | 文档明确 `stored_files` 不负责业务权限判断，溯源字段不建立业务外键 |
 | 评价扩展边界 | 通过 | `evaluations` 使用 `business_type + business_id` 定位业务对象，不额外写死代取请求外键 |
-| 业务类型命名一致性 | 通过 | 支付、评价、文件溯源和通知上下文中的代取业务类型统一采用 `PICKUP_REQUEST`；通知类型枚举中的 `PICKUP` 仍表示通知类别 |
-| 索引合理性 | 基本通过 | 实名审核状态查询、用户待审核检查、代取大厅、我的记录、超时扫描、支付回调、通知未读、评价动态聚合均有对应索引或唯一约束支撑 |
-| 潜在风险 | 需实现层控制 | 实名认证同一用户同一时间只能有一条 `PENDING` 审核记录，由 Service 层校验；支付异常通过失败原因和日志追踪，不写入稳定支付状态 |
+| 业务类型命名一致性 | 通过 | 评价、文件溯源和通知上下文中的代取业务类型统一采用 `PICKUP_REQUEST`；通知类型枚举中的 `PICKUP` 仍表示通知类别 |
+| 索引合理性 | 基本通过 | 实名审核状态查询、用户待审核检查、代取大厅、我的记录、超时扫描、积分流水、通知未读、评价动态聚合均有对应索引或唯一约束支撑 |
+| 潜在风险 | 需实现层控制 | 实名认证同一用户同一时间只能有一条 `PENDING` 审核记录，由 Service 层校验；积分赠送每学号一次、签到每日一次由业务层去重 |
 
 ---
 

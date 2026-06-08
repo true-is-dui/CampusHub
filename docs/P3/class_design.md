@@ -13,7 +13,7 @@
 
 本次回溯以最新文档为基线：
 
-1. P1 v2.1：Must 范围聚焦用户管理、实名认证审核、代取需求大厅、代取服务闭环、支付宝沙箱支付、文件上传和我的代取记录。
+1. P1 v2.1：Must 范围聚焦用户管理、实名认证审核、代取需求大厅、代取服务闭环、平台积分报酬、文件上传和我的代取记录。
 2. P2 v1.2：采用前后端分离 + 后端单体分层架构，后端模块间采用同步内部调用。
 3. 评价体系和站内通知为 Should，保留类与接口位置，但不作为代取闭环的阻断能力。
 4. 失物招领、二手交易、私聊、举报/申诉为 Could，不进入本版核心类图主线。
@@ -30,11 +30,12 @@ classDiagram
     User "1" --> "*" PickupRequest : 发布
     User "1" --> "*" VerificationReview : 提交实名审核
 
-    PickupRequest "0..1" --> "1" PaymentRecord : paymentId
     PickupRequest ..> StoredFile : 通过fileId引用凭证文件
     Evaluation ..> PickupRequest : businessType=PICKUP_REQUEST,businessId
     User "1" --> "*" Evaluation : 发出/收到
     User "1" --> "*" NotificationRecord : 接收
+    User "1" --> "*" PointTransaction : 拥有积分流水
+    PointTransaction ..> PickupRequest : relatedPickupId
 
     class User {
         +Long id
@@ -47,11 +48,15 @@ classDiagram
         +Long verificationFileId
         +AuthStatus authStatus
         +UserRole role
+        +Long pointBalance
+        +LocalDate lastCheckInDate
         +markAuthSubmitted(studentId, realName, fileId)
         +markAuthApproved()
         +markAuthRejected(reason)
         +updateProfile(nickname, avatarFileId, college, contact)
         +canParticipatePickup()
+        +deductPoints(amount)
+        +addPoints(amount)
     }
 
     class VerificationReview {
@@ -75,11 +80,9 @@ classDiagram
         +Long pickupCredentialFileId
         +RewardType rewardType
         +BigDecimal rewardAmount
-        +Long paymentId
         +PickupStatus status
         +LocalDateTime acceptDeadline
         +Long completionProofFileId
-        +markWaitingPayment(paymentId)
         +markWaitingAccept()
         +markAccepted(acceptorId)
         +recordCompletionProof(fileId)
@@ -91,22 +94,14 @@ classDiagram
         +isAcceptor(userId)
     }
 
-    class PaymentRecord {
-        +Long paymentId
-        +Long payerId
-        +Long receiverId
-        +BigDecimal amount
-        +BusinessType businessType
-        +String businessTraceNo
-        +String outTradeNo
-        +String tradeNo
-        +PaymentStatus status
-        +LocalDateTime expireAt
-        +LocalDateTime statusChangedAt
-        +markPaid(tradeNo)
-        +markClosed(reason)
-        +markRefunded()
-        +markSettled(receiverId)
+    class PointTransaction {
+        +Long id
+        +Long userId
+        +PointTransactionType type
+        +Long amount
+        +Long balanceAfter
+        +Long relatedPickupId
+        +LocalDateTime createdAt
     }
 
     class StoredFile {
@@ -159,14 +154,14 @@ classDiagram
 
     PickupService --> PickupRequest
     PickupService --> UserService : 获取认证状态/公开摘要
-    PickupService --> PaymentService : 预付款/退款/结算
+    PickupService --> PointService : 发布扣减/取消退回/完成转移
     PickupService --> FileStorageService : 取件凭证/完成凭证
     PickupService --> NotificationService : 接单/凭证/完成通知
     FileStorageService --> StoredFile : 维护文件元数据和上传溯源
 
-    PaymentService --> PaymentRecord
-    PaymentService --> PaymentGateway : 依赖支付网关接口
-    PaymentGateway <|.. AlipaySandboxPaymentGateway
+    UserService --> PointService : 认证赠送/每日签到
+    PointService --> User : 维护积分余额
+    PointService --> PointTransaction : 写入积分流水
 
     EvaluationService --> Evaluation
     EvaluationService --> PickupService : 查询评价上下文
@@ -199,10 +194,6 @@ classDiagram
 
     class PickupService {
         +publishPickup(command, currentUserId)
-        +continuePickupPayment(pickupId, publisherId)
-        +cancelWaitingPaymentPickup(pickupId, publisherId)
-        +handlePickupPaymentSuccess(paymentId, tradeNo)
-        +expireWaitingPaymentPickups(now)
         +queryHall(campus, rewardType, pageQuery)
         +queryDetail(pickupId, currentUserId)
         +acceptPickup(pickupId, acceptorId)
@@ -215,24 +206,14 @@ classDiagram
         +queryPickupEvaluationContext(pickupId)
     }
 
-    class PaymentService {
-        +createPrepay(payerId, amount, expireAt, businessType, businessTraceNo)
-        +handlePaymentSuccess(paymentId, tradeNo)
-        +cancelWaitingPayment(paymentId)
-        +expireWaitingPayments(now)
-        +queryPaymentStatus(paymentId)
-        +refundPayment(paymentId)
-        +settlePayment(paymentId, receiverId)
-        +queryTransactions(userId, pageQuery)
-    }
-
-    class PaymentGateway {
-        +createPrepay(outTradeNo, amount, expireAt)
-        +verifyCallback(callbackParams)
-        +closeUnpaid(outTradeNo)
-        +refund(outTradeNo, amount)
-        +transfer(receiverAccount, amount)
-        +queryTrade(outTradeNo)
+    class PointService {
+        +grantInitialPoints(userId)
+        +checkIn(userId)
+        +getBalance(userId)
+        +spendForPublish(userId, amount, pickupId)
+        +refundForCancel(userId, amount, pickupId)
+        +transferOnComplete(payerId, receiverId, amount, pickupId)
+        +queryTransactions(userId, type, pageQuery)
     }
 
     class FileStorageService {
@@ -284,6 +265,8 @@ classDiagram
 | contact | String | 联系方式，选填；未填写时不展示 |
 | authStatus | AuthStatus(Enum) | 未认证/审核中/已通过/已驳回 |
 | role | UserRole(Enum) | 普通用户/管理员 |
+| pointBalance | Long | 平台积分余额，纯虚拟、不可充值提现 |
+| lastCheckInDate | LocalDate | 最近一次签到日期，用于每日签到去重 |
 | createdAt | LocalDateTime | 注册时间 |
 
 | 方法 | 说明 |
@@ -293,6 +276,8 @@ classDiagram
 | markAuthRejected(reason) | 认证状态变为已驳回 |
 | updateProfile(nickname, avatarFileId, college, contact) | 更新公开资料 |
 | canParticipatePickup() | 判断用户认证状态是否允许参与代取服务；供服务层内部校验使用 |
+| deductPoints(amount) | 从积分余额中扣减；余额不足时由服务层拦截，供发布有报酬代取使用 |
+| addPoints(amount) | 向积分余额中增加；供签到、认证赠送、取消退回、完成入账使用 |
 
 #### CurrentUserContext（当前用户上下文）
 
@@ -347,8 +332,7 @@ classDiagram
 | pickupCredentialFileId | Long | 取件凭证图片文件标识，接单前不公开 |
 | rewardType | RewardType(Enum) | 有报酬/无报酬 |
 | rewardAmount | BigDecimal | 有报酬服务必填，范围 1-200 元；无报酬服务为空 |
-| paymentId | Long | 支付记录标识，无报酬服务为空 |
-| status | PickupStatus(Enum) | 待支付/待接单/进行中/已完成/已取消 |
+| status | PickupStatus(Enum) | 待接单/进行中/已完成/已取消 |
 | acceptDeadline | LocalDateTime | 接单截止时间 |
 | acceptedAt | LocalDateTime | 接单时间 |
 | completionProofFileId | Long | 完成凭证图片文件标识，接单方上传；MVP 阶段限定为一张图片 |
@@ -358,8 +342,7 @@ classDiagram
 
 | 方法 | 说明 |
 |------|------|
-| markWaitingPayment(paymentId) | 有报酬服务发布后进入待支付；支付过期时间由支付记录维护 |
-| markWaitingAccept() | 无报酬服务发布成功或有报酬服务支付成功后进入待接单 |
+| markWaitingAccept() | 发布成功后进入待接单（无报酬直接进入；有报酬在扣减发布方积分后进入） |
 | markAccepted(acceptorId) | 记录接单方并进入进行中 |
 | recordCompletionProof(fileId) | 保存单张完成凭证图片标识 |
 | markCompleted() | 发布方确认完成后进入已完成 |
@@ -386,34 +369,21 @@ classDiagram
 | createdAt | LocalDateTime | 发布时间 |
 | completedAt | LocalDateTime | 服务完成时间；未完成服务为空 |
 
-> `PickupSummary` 是代取服务的通用展示摘要，主要用于“我的发布”“我的接单”记录总览，也可被评价详情复用为关联服务背景。它不暴露取件凭证、完成凭证、支付记录和参与者隐私字段。
+> `PickupSummary` 是代取服务的通用展示摘要，主要用于“我的发布”“我的接单”记录总览，也可被评价详情复用为关联服务背景。它不暴露取件凭证、完成凭证、积分流水和参与者隐私字段。
 
-#### PaymentRecord（支付记录）
+#### PointTransaction（积分流水）
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
-| paymentId | Long | 支付记录主键 |
-| payerId | Long | 付款方，即代取发布方 |
-| receiverId | Long | 收款方，即接单方；结算前可为空 |
-| amount | BigDecimal | 支付金额 |
-| businessType | BusinessType(Enum) | 业务类型，当前 MVP 可为 `PICKUP_REQUEST` |
-| businessTraceNo | String | 业务追踪号，由代取服务模块生成并传入 |
-| outTradeNo | String | 平台生成的商户订单号 |
-| tradeNo | String | 支付宝沙箱交易号 |
-| status | PaymentStatus(Enum) | 内部设计状态：待支付/已支付/已关闭/已退款/已结算 |
-| expireAt | LocalDateTime | 支付有效期截止时间 |
-| closeReason | String | 关闭原因，例如发布方取消或支付超时 |
-| statusChangedAt | LocalDateTime | 最近一次支付状态变更时间 |
+| id | Long | 流水主键 |
+| userId | Long | 流水所属用户 ID |
+| type | PointTransactionType(Enum) | 流水类型：认证赠送/签到/发布扣减/取消退回/完成入账 |
+| amount | Long | 积分变动量，正数入账，负数出账 |
+| balanceAfter | Long | 本次变动后的积分余额，冗余记录便于直接展示 |
+| relatedPickupId | Long | 关联代取服务 ID，仅代取相关流水有值；非代取流水为空 |
 | createdAt | LocalDateTime | 创建时间 |
 
-| 方法 | 说明 |
-|------|------|
-| markPaid(tradeNo) | 标记预付款已支付 |
-| markClosed(reason) | 待支付记录未完成付款时关闭；覆盖发布方取消和支付超时两种来源 |
-| markRefunded() | 服务取消且已预付款时标记退款 |
-| markSettled(receiverId) | 发布方确认完成后标记结算 |
-
-> `PaymentStatus` 不是 P1 直接规定的业务状态，而是 P3 根据 P1/P2 中“预付款、关闭未支付、退款、结算”这些支付动作派生出的内部实现状态。支付接口调用失败、回调验签失败或第三方异常不作为支付记录的稳定业务状态保存，按错误码和关键操作日志处理。P1 明确规定的代取业务状态仍以 `PickupStatus` 为准。支付模块不保存具体代取服务 ID 字段，业务对象与支付记录的关联由 `PickupRequest.paymentId` 维护。`businessType` 和 `businessTraceNo` 仅用于幂等校验、日志追踪、异常排查和支付宝沙箱回调匹配；支付模块不根据这些字段理解或修改具体业务状态，代取服务状态仍由 `PickupService` / `PickupRequest` 维护。待支付过期时间只保存在支付记录 `expireAt` 中，代取服务不重复保存；退款和结算时间如需展示，可使用 `statusChangedAt` 或关键操作日志追溯。
+> 积分流水只记录稳定的成功变动；积分余额存于 `User.pointBalance`，每次流水写入时由积分服务在同一事务内同步更新余额并写入 `balanceAfter`。积分为平台内虚拟资产，不可充值提现，因此不涉及第三方交易号、商户订单号等支付字段。认证赠送每个学号仅一次、每日签到每日仅一次由业务层去重；积分不足导致的发布失败不写流水。`PointTransactionType` 取值固定为 `EARN_VERIFICATION`、`EARN_CHECK_IN`、`SPEND_PUBLISH`、`REFUND_CANCEL`、`INCOME_COMPLETE`。
 
 #### StoredFile（文件资源）
 
@@ -535,21 +505,17 @@ classDiagram
 
 #### PickupService（代取服务）
 
-`PickupService` 负责身份、权限、状态校验、支付、文件和通知等模块协作。代取服务状态较少，且业务动作已经由服务方法明确表达，因此不额外引入状态模式；各方法内部按 `PickupStatus` 进行必要状态校验。
+`PickupService` 负责身份、权限、状态校验、积分、文件和通知等模块协作。代取服务状态较少，且业务动作已经由服务方法明确表达，因此不额外引入状态模式；各方法内部按 `PickupStatus` 进行必要状态校验。
 
 | 方法 | 说明 |
 |------|------|
-| publishPickup(command, currentUserId) | 发布代取服务；认证用户才能发布。有报酬服务创建待支付锁单和预付款入口；无报酬服务直接进入待接单 |
-| continuePickupPayment(pickupId, publisherId) | 发布方在待支付状态继续支付，返回支付入口 |
-| cancelWaitingPaymentPickup(pickupId, publisherId) | 发布方取消待支付服务，关闭未支付记录，不触发退款 |
-| handlePickupPaymentSuccess(paymentId, tradeNo) | 支付成功后将对应代取服务推进到待接单 |
-| expireWaitingPaymentPickups(now) | 扫描 3 分钟待支付超时服务并取消 |
+| publishPickup(command, currentUserId) | 发布代取服务；认证用户才能发布。有报酬服务调用 `PointService.spendForPublish` 扣减发布方积分后进入待接单（余额不足则发布失败）；无报酬服务直接进入待接单 |
 | queryHall(campus, rewardType, pageQuery) | 查询代取需求大厅，只返回待接单服务，支持校区和报酬类型筛选，按发布时间倒序 |
 | queryDetail(pickupId, currentUserId) | 查询详情；接单前不返回取件凭证 |
 | acceptPickup(pickupId, acceptorId) | 认证用户接单；接单方不得是发布方；成功后进入进行中 |
 | uploadCompletionProof(pickupId, acceptorId, fileId) | 接单方上传单张完成凭证；MVP 阶段完成凭证限定为一张图片 |
-| confirmComplete(pickupId, publisherId) | 发布方确认完成；有报酬服务触发结算，无报酬服务不处理资金 |
-| cancelPickup(pickupId, publisherId, reason) | 发布方取消待支付或待接单服务；已预付款时触发退款 |
+| confirmComplete(pickupId, publisherId) | 发布方确认完成；有报酬服务调用 `PointService.transferOnComplete` 将积分转给接单方，无报酬服务不处理积分 |
+| cancelPickup(pickupId, publisherId, reason) | 发布方取消待接单服务；有报酬服务调用 `PointService.refundForCancel` 退回发布方积分 |
 | expireOpenPickups(now) | 扫描超过接单截止时间仍无人接单的服务并取消 |
 | queryMyPublished(userId, status, pageQuery) | 查询我的发布，支持总览和按状态分类，返回 `PickupSummary` 列表 |
 | queryMyAccepted(userId, status, pageQuery) | 查询我的接单，支持总览和按状态分类，返回 `PickupSummary` 列表 |
@@ -557,22 +523,21 @@ classDiagram
 
 > 代取服务不保存评价 ID 列表。评价查询、评价统计、评价详情展示和重复评价校验均通过 `Evaluation.businessType + Evaluation.businessId` 定位业务对象；当前 MVP 中 `businessType=PICKUP_REQUEST`，`businessId` 为代取服务 ID。
 
-#### PaymentService（支付服务）
+#### PointService（积分服务）
 
-`PaymentService` 只维护平台内部支付记录和支付状态，不理解具体业务对象。外部支付细节由 `PaymentGateway` 适配，MVP 实现为 `AlipaySandboxPaymentGateway`。
+`PointService` 维护用户积分余额和积分流水，是平台内虚拟积分的唯一入口。积分不可充值提现，不依赖任何第三方支付网关。所有积分变动与对应业务状态变更（认证、签到、代取发布/取消/完成）在同一事务内完成，并写入 `point_transactions` 流水。
 
 | 方法 | 说明 |
 |------|------|
-| createPrepay(payerId, amount, expireAt, businessType, businessTraceNo) | 创建支付宝沙箱预付款入口，接收通用业务追踪信息，返回 `paymentId`、支付入口和过期时间 |
-| handlePaymentSuccess(paymentId, tradeNo) | 处理支付宝沙箱支付成功通知，标记支付记录已支付 |
-| cancelWaitingPayment(paymentId) | 关闭尚未支付的支付记录 |
-| expireWaitingPayments(now) | 关闭超时仍未支付的支付记录，关闭原因记录为支付超时 |
-| queryPaymentStatus(paymentId) | 查询支付记录状态 |
-| refundPayment(paymentId) | 已预付款服务取消时执行退款 |
-| settlePayment(paymentId, receiverId) | 发布方确认完成后向接单方结算 |
-| queryTransactions(userId, pageQuery) | 查询用户支付、退款和结算记录 |
+| grantInitialPoints(userId) | 实名认证通过后赠送初始积分（当前 MVP 为 100），每个学号仅一次，由业务层去重 |
+| checkIn(userId) | 每日首次签到赠送积分（当前 MVP 为 5），按 `users.last_check_in_date` 去重；当日已签到返回业务冲突 |
+| getBalance(userId) | 查询用户当前积分余额 |
+| spendForPublish(userId, amount, pickupId) | 发布有报酬代取时扣减发布方积分；余额不足抛业务异常，写 `SPEND_PUBLISH` 流水 |
+| refundForCancel(userId, amount, pickupId) | 取消有报酬代取时退回发布方积分，写 `REFUND_CANCEL` 流水 |
+| transferOnComplete(payerId, receiverId, amount, pickupId) | 确认完成时将积分从发布方转入接单方，写双方流水（`SPEND` 已在发布时记，完成记 `INCOME_COMPLETE`） |
+| queryTransactions(userId, type, pageQuery) | 分页查询用户积分流水，可按流水类型筛选 |
 
-> `businessType` 和 `businessTraceNo` 只服务于幂等校验、日志追踪、异常排查和支付宝沙箱回调匹配。支付模块不新增具体代取服务 ID 字段，也不根据通用追踪字段修改代取服务状态。
+> 积分余额存于 `User.pointBalance`，`PointService` 在每次变动时同步更新余额并写入 `PointTransaction.balanceAfter`。积分赠送、签到的去重和发布扣减的余额校验均在业务层完成；积分不足、当日重复签到等失败不写流水，由业务层返回业务错误。`PointService` 不理解代取业务状态，代取状态仍由 `PickupService` / `PickupRequest` 维护，`relatedPickupId` 仅用于流水溯源。
 
 #### FileStorageService（文件存储服务）
 
@@ -611,7 +576,7 @@ classDiagram
 |------|-----------|----------------|
 | 关键词搜索 | Could | 可在 `PickupService.queryHall` 中增加 keyword 条件，不改变核心类结构 |
 | 失物招领 | Could | 后续可新增 `LostFoundItem` 和 `LostFoundService`，但不进入当前核心类图主线 |
-| 二手交易 | Could | 后续可新增 `SecondhandItem` 和 `SecondhandService`，不接入平台支付 |
+| 二手交易 | Could | 后续可新增 `SecondhandItem` 和 `SecondhandService`，不接入平台积分结算 |
 | 私聊 | Could | 后续可新增 `Conversation`、`Message` 和 `ConversationService`；当前通知不使用 WebSocket |
 | 举报、封禁、评价撤回、评价申诉、代取异常申诉 | Could | 后续可新增管理记录模型或评价状态字段；当前 Must 管理能力仅保留实名认证审核 |
 
@@ -630,12 +595,12 @@ classDiagram
 | SOLID 原则 | 检查问题 | AI 设计是否违反 | 违反说明 | 修正方案 |
 |-----------|---------|--------------|---------|---------|
 | S - 单一职责 | 是否存在一个类同时处理多类业务？ | 是 | AI 初稿使用通用 `Task` 承载代取、失物招领、二手交易、找搭子、问答等业务，导致一个类同时承担服务履约、内容展示、交易和社交职责 | 删除全局 `Task` 基类。本版只保留 Must 的 `PickupRequest`；Could 功能以后独立建模 |
-| S - 单一职责 | 用户类是否混入支付或评价统计逻辑？ | 是 | AI 初稿让 `User` 直接计算报酬、冻结资金和好评率，导致身份信息与业务统计耦合 | `User` 只负责身份、资料和认证状态；支付交给 `PaymentService`，评价统计交给 `EvaluationService` |
+| S - 单一职责 | 用户类是否混入支付或评价统计逻辑？ | 是 | AI 初稿让 `User` 直接计算报酬、冻结资金和好评率，导致身份信息与业务统计耦合 | `User` 只负责身份、资料、认证状态和积分余额的领域方法；积分流转编排交给 `PointService`，评价统计交给 `EvaluationService` |
 | O - 开闭原则 | 新增业务类型是否需要修改既有核心类？ | 是 | AI 初稿用 `type` 字段和大量 switch 区分业务类型，新增类型要改公共类和服务分支 | 当前核心类只建模代取；后续新增失物招领、二手交易时新增独立领域类和服务，不修改代取状态逻辑 |
 | L - 里氏替换 | 子类能否自然替换父类？ | 是 | AI 初稿让不同业务继承同一个 `Task`，但许多字段只对某个子类有效，产生大量空字段和非法行为 | 不再强行抽象跨业务父类。`PickupRequest` 独立表达代取履约闭环 |
-| I - 接口隔离 | 是否存在过胖服务接口？ | 是 | AI 初稿设计 `IPlatformService` 或 `ITaskService`，同时包含注册、发布、接单、评价、聊天、举报等方法 | 按模块拆为 `AuthService`、`UserService`、`PickupService`、`PaymentService`、`FileStorageService`、`EvaluationService`、`NotificationService` |
-| D - 依赖倒转 | 业务服务是否直接依赖第三方或底层实现？ | 是 | AI 初稿让代取服务直接调用支付宝 SDK 和本地文件路径，业务流程依赖低层细节 | `PaymentService` 依赖 `PaymentGateway` 抽象，由 `AlipaySandboxPaymentGateway` 适配；文件读取通过 `FileStorageService` 接口 |
-| D - 依赖倒转 | 高层模块是否直接理解低层数据表结构？ | 是 | AI 初稿在支付记录中保存具体 `taskId/orderId` 并让支付模块理解业务对象 | 支付模块只维护支付记录和通用追踪字段，`PickupRequest.paymentId` 维护业务到支付的关联 |
+| I - 接口隔离 | 是否存在过胖服务接口？ | 是 | AI 初稿设计 `IPlatformService` 或 `ITaskService`，同时包含注册、发布、接单、评价、聊天、举报等方法 | 按模块拆为 `AuthService`、`UserService`、`PickupService`、`PointService`、`FileStorageService`、`EvaluationService`、`NotificationService` |
+| D - 依赖倒转 | 业务服务是否直接依赖第三方或底层实现？ | 是 | AI 初稿让代取服务直接调用第三方 SDK 和本地文件路径，业务流程依赖低层细节 | 文件读取通过 `FileStorageService` 接口；报酬流转收口到 `PointService`，代取服务只依赖该接口、不直接操作积分余额或流水表 |
+| D - 依赖倒转 | 高层模块是否直接理解低层数据表结构？ | 是 | AI 初稿在资金记录中保存具体 `taskId/orderId` 并让资金模块理解业务对象 | 积分模块只维护余额和流水，`PointTransaction.relatedPickupId` 仅作流水溯源，不反向约束代取请求；代取状态由 `PickupService` / `PickupRequest` 维护 |
 
 ### 2.3 修正统计
 
@@ -725,37 +690,39 @@ classDiagram
 
 图片上传流程会散落在用户、实名认证审核和代取服务代码中。不同场景容易出现校验规则不一致、路径规则重复、元数据写入遗漏等问题，也会诱导文件模块承担业务权限判断，破坏模块边界。
 
-### 3.2 适配器模式 — 支付宝沙箱支付适配
+### 3.2 模板方法模式 — 积分变动处理流程
 
-**应用场景：** MVP 使用支付宝沙箱验证有报酬代取服务的预付款、退款和结算流程。支付宝 SDK 的参数、回调验签、返回码和异常形式都属于外部系统细节，业务层不应直接依赖。
+**应用场景：** 积分体系存在多种变动场景：实名认证赠送、每日签到、发布扣减、取消退回、完成转移。它们都遵循同一骨架：前置校验（余额是否充足、是否重复）、计算变动量、更新 `User.pointBalance`、写入 `point_transactions` 流水并记录 `balanceAfter`；差异仅在前置校验规则、流水类型 `PointTransactionType` 和金额正负。
+
+> 说明：早期设计在此处采用适配器模式封装支付宝沙箱（`PaymentGateway` / `AlipaySandboxPaymentGateway`）。因 MVP 范围将有报酬代取的报酬从真实货币改为平台内虚拟积分，资金流转完全在平台内完成、不再依赖任何第三方支付网关，适配器模式随支付模块一并移除。积分变动改由平台内统一的模板方法处理。
 
 **类结构：**
 
 ```mermaid
 classDiagram
-    PaymentService --> PaymentGateway : 依赖抽象
-    PaymentGateway <|.. AlipaySandboxPaymentGateway
+    PointService --> User : 更新余额
+    PointService --> PointTransaction : 写入流水
 
-    class PaymentGateway {
-        +createPrepay(outTradeNo, amount, expireAt)
-        +verifyCallback(callbackParams)
-        +closeUnpaid(outTradeNo)
-        +refund(outTradeNo, amount)
-        +transfer(receiverAccount, amount)
-        +queryTrade(outTradeNo)
+    class PointService {
+        +grantInitialPoints(userId)
+        +checkIn(userId)
+        +spendForPublish(userId, amount, pickupId)
+        +refundForCancel(userId, amount, pickupId)
+        +transferOnComplete(payerId, receiverId, amount, pickupId)
+        #applyChange(userId, type, amount, relatedPickupId)
     }
 ```
 
 **为什么用：**
 
-1. `PaymentService` 只表达平台内部支付语义：创建预付款、支付成功、关闭待支付、退款、结算和查询。
-2. `AlipaySandboxPaymentGateway` 负责把支付宝沙箱 SDK 的输入输出转换成平台内部结构。
-3. 后续从支付宝沙箱切换到模拟支付或正式支付宝时，只需要替换 `PaymentGateway` 实现。
-4. 符合依赖倒转原则：业务层依赖支付网关抽象，而不是第三方 SDK 具体类。
+1. `applyChange(userId, type, amount, relatedPickupId)` 作为内部模板，固定「读取用户 → 校验 → 改余额 → 写流水（含 `balanceAfter`）」骨架，保证每次积分变动都同步更新余额并留痕。
+2. 各公开方法只表达自身的前置校验差异：`spendForPublish` 校验余额充足、`checkIn` 校验当日未签到、`grantInitialPoints` 校验该学号未赠送过，再复用同一变动骨架。
+3. 余额更新与流水写入在同一事务内完成，避免「改了余额没留流水」或「记了流水没改余额」的不一致。
+4. 符合单一职责：积分变动逻辑收口在 `PointService`，代取、用户等模块只调用其语义方法，不直接操作 `pointBalance` 或流水表。
 
 **不用会怎样：**
 
-支付宝 SDK 调用、回调验签和返回码判断会散落在 `PaymentService` 或 `PickupService` 中。第三方接口变化时会直接影响核心业务流程，测试范围明显扩大。
+积分的读余额、校验、改余额、写流水会散落在用户模块和代取模块中，容易出现余额与流水不一致、漏写 `balanceAfter`、重复赠送或重复签到等问题，破坏积分账目的可追溯性。
 
 ## 四、与最新需求的追踪关系
 
@@ -766,12 +733,13 @@ classDiagram
 | FR-UM-03 | `UserSummary` 隔离公开字段；实名信息仅用户模块和实名认证审核流程可访问 |
 | FR-UM-04~07 | `User.submitVerification`、`VerificationReviewService`、`User.authStatus` |
 | FR-UM-08 | `UserService.ensureCertified`、`CurrentUserContext` |
+| 积分赠送与签到 | `PointService.grantInitialPoints`（认证赠送 100，每学号一次）、`PointService.checkIn`（每日签到 +5）、`User.pointBalance/lastCheckInDate` |
 | FR-HALL-01~06 | `PickupService.queryHall`、`PickupRequest.isHallVisible`、`PickupStatus.WAITING_ACCEPT` |
 | FR-PU-01~02 | `PickupRequest` 字段和 `publishPickup` 校验 |
-| FR-PU-03~04 | `PaymentService.createPrepay(payerId, amount, expireAt, businessType, businessTraceNo)`、`PaymentRecord.businessType/businessTraceNo`、`PickupRequest.markWaitingAccept` |
+| FR-PU-03~04 | `PointService.spendForPublish(userId, amount, pickupId)`、`User.deductPoints`、`PickupRequest.markWaitingAccept` |
 | FR-PU-05~06 | `PickupService.acceptPickup`、`PickupRequest.canViewPickupCredential` |
-| FR-PU-07~08 | `uploadCompletionProof(pickupId, acceptorId, fileId)`、`PickupRequest.completionProofFileId`、`confirmComplete`、`PaymentService.settlePayment` |
-| FR-PU-09~11 | `PickupStatus` 状态校验、`cancelPickup`、`expireWaitingPaymentPickups`、`expireOpenPickups` |
+| FR-PU-07~08 | `uploadCompletionProof(pickupId, acceptorId, fileId)`、`PickupRequest.completionProofFileId`、`confirmComplete`、`PointService.transferOnComplete` |
+| FR-PU-09~11 | `PickupStatus` 状态校验、`cancelPickup`、`PointService.refundForCancel`、`expireOpenPickups` |
 | FR-PU-12 | `PickupSummary`、`queryMyPublished`、`queryMyAccepted` |
 | FR-CR-01~04 | `Evaluation.businessType/businessId/revieweeRoleInBusiness`、`RatingSummary.publisherRoleSummary/acceptorRoleSummary`、`RatingRoleSummary.revieweeRoleInBusiness`、`EvaluationHistorySummary`、`EvaluationDetail`、`EvaluationService`，作为 Should 模块；`EvaluationDetail` 复用 `PickupSummary` 展示关联服务背景 |
 | FR-NT-01~02 | `NotificationRecord`、`NotificationService`，作为 Should 模块 |
