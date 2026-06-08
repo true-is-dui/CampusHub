@@ -6,49 +6,72 @@
       </template>
     </el-page-header>
 
-    <el-card class="profile-card" shadow="never">
-      <template #header>
-        <div class="card-header-row">
-          <span>个人信息</span>
-          <el-button text type="primary" @click="toggleEdit">
-            {{ isEditing ? '取消' : '编辑' }}
-          </el-button>
-        </div>
-      </template>
-
-      <!-- View Mode -->
-      <template v-if="!isEditing">
-        <div class="profile-display">
-          <div class="avatar-section">
-            <!-- 直接使用全局头像 -->
-            <el-avatar :size="80" :src="userStore.avatarUrl" icon="UserFilled" />
-          </div>
-          <el-descriptions :column="1" border>
-            <el-descriptions-item label="用户名">{{ userInfo?.username }}</el-descriptions-item>
-            <el-descriptions-item label="昵称">{{ userInfo?.nickname || '未设置' }}</el-descriptions-item>
-            <el-descriptions-item label="学院">{{ userInfo?.college || '未设置' }}</el-descriptions-item>
-            <el-descriptions-item label="联系方式">{{ userInfo?.contact || '未设置' }}</el-descriptions-item>
-            <el-descriptions-item label="认证状态">
-              <el-tag :type="authTagType">{{ authStatusLabel }}</el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item label="角色">
-              <el-tag v-if="userInfo?.role === 'ADMIN'" type="danger">管理员</el-tag>
-              <el-tag v-else>普通用户</el-tag>
-            </el-descriptions-item>
-          </el-descriptions>
-          <div class="quick-links">
-            <el-button type="primary" text @click="$router.push('/verification')">
-              实名认证
-            </el-button>
-            <el-button type="primary" text @click="$router.push('/transactions')">
-              交易记录
-            </el-button>
+    <!-- 用户头部卡片 -->
+    <div class="profile-header">
+      <div class="header-left">
+        <el-avatar :size="72" :src="userStore.avatarUrl" icon="UserFilled" />
+        <div class="header-info">
+          <div class="header-name">{{ userInfo?.nickname || userInfo?.username }}</div>
+          <div class="header-meta">
+            <span class="meta-id">学号 {{ userInfo?.studentIdMasked }}</span>
+            <el-tag :type="authTagType" size="small">{{ authStatusLabel }}</el-tag>
+            <el-tag v-if="userInfo?.role === 'ADMIN'" type="danger" size="small">管理员</el-tag>
           </div>
         </div>
-      </template>
+      </div>
+      <el-button type="primary" plain @click="toggleEdit">编辑资料</el-button>
+    </div>
 
-      <!-- Edit Mode -->
-      <template v-else>
+    <!-- 查看模式 -->
+    <template v-if="!isEditing">
+      <!-- 基本信息 -->
+      <el-card class="info-card" shadow="never">
+        <template #header><span>基本信息</span></template>
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">用户名</span>
+            <span class="info-value">{{ userInfo?.username }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">昵称</span>
+            <span class="info-value">{{ userInfo?.nickname || '未设置' }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">学院</span>
+            <span class="info-value">{{ userInfo?.college || '未设置' }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">联系方式</span>
+            <span class="info-value">{{ userInfo?.contact || '未设置' }}</span>
+          </div>
+        </div>
+      </el-card>
+
+      <!-- 快捷入口 -->
+      <div class="quick-cards">
+        <div class="quick-card" @click="$router.push('/verification')">
+          <span class="quick-icon">🪪</span>
+          <span class="quick-label">实名认证</span>
+        </div>
+        <div class="quick-card" @click="$router.push('/transactions')">
+          <span class="quick-icon">💰</span>
+          <span class="quick-label">积分流水</span>
+        </div>
+        <div class="quick-card" @click="$router.push('/my-pickups')">
+          <span class="quick-icon">📦</span>
+          <span class="quick-label">我的代取</span>
+        </div>
+        <div class="quick-card" @click="$router.push('/notifications')">
+          <span class="quick-icon">🔔</span>
+          <span class="quick-label">消息通知</span>
+        </div>
+      </div>
+    </template>
+
+    <!-- 编辑模式 -->
+    <template v-else>
+      <el-card class="info-card" shadow="never">
+        <template #header><span>编辑资料</span></template>
         <el-form
             ref="editFormRef"
             :model="editForm"
@@ -67,7 +90,6 @@
                 :on-remove="onAvatarRemove"
                 :file-list="avatarFileList"
             >
-              <!-- 没有文件时显示加号，有文件后自动隐藏 -->
               <el-icon v-if="avatarFileList.length === 0"><Plus /></el-icon>
             </el-upload>
             <div class="upload-tip">JPG/PNG，不超过5MB，最多上传一张</div>
@@ -81,13 +103,13 @@
           <el-form-item label="联系方式" prop="contact">
             <el-input v-model="editForm.contact" placeholder="请输入联系方式（最多100字符）" maxlength="100" show-word-limit />
           </el-form-item>
-          <el-form-item>
-            <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
-            <el-button @click="isEditing = false">取消</el-button>
-          </el-form-item>
         </el-form>
-      </template>
-    </el-card>
+      </el-card>
+      <div class="edit-actions">
+        <el-button size="large" @click="isEditing = false">取消</el-button>
+        <el-button type="primary" size="large" :loading="saving" @click="handleSave">保存</el-button>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -272,28 +294,129 @@ onMounted(async () => {
 .profile-view {
   max-width: 700px;
   margin: 0 auto;
+  padding-bottom: 24px;
 }
 
-.profile-card {
-  margin-top: 20px;
-}
-
-.card-header-row {
+.profile-header {
+  margin-top: 16px;
+  padding: 24px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #409eff, #66b1ff);
+  color: #fff;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
 }
 
-.avatar-section {
+.header-left {
   display: flex;
-  justify-content: center;
-  margin-bottom: 20px;
-}
-
-.quick-links {
-  display: flex;
+  align-items: center;
   gap: 16px;
+}
+
+.header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.header-name {
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.header-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.meta-id {
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+.profile-header :deep(.el-button) {
+  border-color: rgba(255, 255, 255, 0.6);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.profile-header :deep(.el-button:hover) {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: #fff;
+  color: #fff;
+}
+
+.info-card {
+  margin-top: 16px;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 24px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-label {
+  font-size: 13px;
+  color: #909399;
+}
+
+.info-value {
+  font-size: 15px;
+  color: #303133;
+}
+
+.quick-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.quick-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px 12px;
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.quick-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.quick-icon {
+  font-size: 28px;
+}
+
+.quick-label {
+  font-size: 14px;
+  color: #303133;
+}
+
+.edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
   margin-top: 20px;
+  padding: 20px;
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
 }
 
 .upload-tip {

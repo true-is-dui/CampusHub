@@ -51,7 +51,7 @@
               <el-tag :type="getRatingTag(evalItem.ratingLevel)" size="small">
                 {{ getRatingLabel(evalItem.ratingLevel) }}
               </el-tag>
-              <span class="eval-time">{{ evalItem.createdAt }}</span>
+              <span class="eval-time">{{ formatTime(evalItem.createdAt) }}</span>
             </div>
             <p class="eval-content">{{ evalItem.contentPreview }}</p>
             <p v-if="evalItem.revieweeRoleInBusiness" class="eval-from">
@@ -95,6 +95,13 @@ const avatarSrc = ref('')
 function formatRate(rate) {
   if (rate == null) return '暂无'
   return (rate * 100).toFixed(1) + '%'
+}
+
+function formatTime(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
 // [新增] 异步加载头像

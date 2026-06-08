@@ -46,7 +46,25 @@
         </el-form>
       </el-card>
 
-      <!-- 不可评价 -->
+      <!-- 已有评价：展示对方的评价 -->
+      <el-card v-else-if="eligibility.evaluation" class="evaluation-card" shadow="never">
+        <div class="reviewee-info">
+          <el-avatar :size="48" :src="revieweeAvatarUrl" icon="UserFilled" />
+          <div class="reviewee-text">
+            <span class="reviewee-label">{{ eligibility.reviewee?.nickname || '匿名用户' }} 对您的评价</span>
+          </div>
+        </div>
+        <el-divider />
+        <div class="eval-display">
+          <el-tag :type="getRatingTag(eligibility.evaluation.ratingLevel)" size="large">
+            {{ getRatingLabel(eligibility.evaluation.ratingLevel) }}
+          </el-tag>
+          <p class="eval-content">{{ eligibility.evaluation.content }}</p>
+          <p class="eval-time">{{ formatTime(eligibility.evaluation.createdAt) }}</p>
+        </div>
+      </el-card>
+
+      <!-- 不可评价且无已有评价 -->
       <el-card v-else class="evaluation-card" shadow="never">
         <el-result
             icon="info"
@@ -77,6 +95,23 @@ const evalForm = reactive({
   content: ''
 })
 
+function getRatingTag(level) {
+  const map = { GOOD: 'success', NEUTRAL: 'info', BAD: 'danger' }
+  return map[level] || 'info'
+}
+
+function getRatingLabel(level) {
+  const map = { GOOD: '好评', NEUTRAL: '中评', BAD: '差评' }
+  return map[level] || level
+}
+
+function formatTime(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 // [新增] 不可评价原因映射
 const reasonMap = {
   NOT_COMPLETED: '代取服务尚未完成，完成后才能评价',
@@ -96,7 +131,7 @@ async function loadEligibility() {
     eligibility.value = res
 
     // 加载被评价人头像
-    if (res?.canEvaluate && res?.reviewee?.userId) {
+    if (res?.reviewee?.userId) {
       try {
         const blob = await getUserAvatar(res.reviewee.userId)
         revieweeAvatarUrl.value = URL.createObjectURL(blob)
@@ -168,5 +203,24 @@ onMounted(() => {
   font-size: 16px;
   font-weight: 500;
   color: #303133;
+}
+
+.eval-display {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.eval-content {
+  color: #303133;
+  font-size: 15px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.eval-time {
+  color: #909399;
+  font-size: 13px;
+  margin: 0;
 }
 </style>

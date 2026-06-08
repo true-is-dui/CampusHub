@@ -7,181 +7,187 @@
     </el-page-header>
 
     <template v-if="detail">
-      <el-card class="detail-card" shadow="never">
-        <div class="status-row">
-          <div class="status-left">
-            <el-tag :type="statusTagType" size="large">{{ statusLabel }}</el-tag>
-            <span v-if="detail.status === 'CANCELLED' && detail.cancelReason" class="cancel-reason">
-              取消原因：{{ cancelReasonLabel(detail.cancelReason) }}
-            </span>
-          </div>
-          <span v-if="detail.rewardType === 'PAID'" class="reward">¥{{ detail.rewardAmount }}</span>
+      <!-- 状态横幅 -->
+      <div class="status-banner" :class="'status-' + detail.status">
+        <div class="banner-left">
+          <span class="status-icon">{{ statusIcon }}</span>
+          <span class="status-text">{{ statusLabel }}</span>
+          <span v-if="detail.status === 'CANCELLED' && detail.cancelReason" class="cancel-reason">
+            — {{ cancelReasonLabel(detail.cancelReason) }}
+          </span>
         </div>
+        <div v-if="detail.rewardType === 'PAID'" class="banner-reward">
+          {{ detail.rewardAmount }} <span class="reward-unit">积分</span>
+        </div>
+      </div>
 
-        <el-descriptions :column="2" border class="detail-info">
-          <el-descriptions-item label="校区">{{ campusLabel(detail.campus) }}</el-descriptions-item>
-          <el-descriptions-item label="报酬类型">
-            {{ detail.rewardType === 'PAID' ? '有报酬' : '无报酬' }}
-          </el-descriptions-item>
-          <el-descriptions-item label="取件地点">{{ detail.pickupLocation }}</el-descriptions-item>
-          <el-descriptions-item label="送达地点">{{ detail.deliveryLocation }}</el-descriptions-item>
-          <el-descriptions-item label="物品描述" :span="2">
-            {{ detail.itemDescription || '无' }}
-          </el-descriptions-item>
-          <!-- 接单截止时间使用格式化函数展示 -->
-          <el-descriptions-item label="接单截止时间" :span="2">
-            {{ formatDateTime(detail.acceptDeadline) || '无' }}
-          </el-descriptions-item>
-        </el-descriptions>
+      <!-- 物品描述 -->
+      <el-card class="desc-card" shadow="never">
+        <div class="desc-label">物品描述</div>
+        <div class="desc-text">{{ detail.itemDescription || '无' }}</div>
+      </el-card>
 
-        <!-- Publisher Info -->
-        <div class="section">
-          <h3>发布者信息</h3>
-          <div class="user-info" @click="goUserPublicProfile(detail.publisher?.userId)">
-            <el-avatar :size="40" :src="publisherAvatarUrl" icon="UserFilled" />
-            <div class="user-text">
-              <span class="user-name clickable">{{ detail.publisher?.nickname || '匿名用户' }}</span>
+      <!-- 信息网格 -->
+      <div class="info-grid">
+        <div class="info-item">
+          <el-icon class="info-icon"><Location /></el-icon>
+          <div class="info-content">
+            <span class="info-label">校区</span>
+            <span class="info-value">{{ campusLabel(detail.campus) }}</span>
+          </div>
+        </div>
+        <div class="info-item">
+          <el-icon class="info-icon"><MapLocation /></el-icon>
+          <div class="info-content">
+            <span class="info-label">取件地点</span>
+            <span class="info-value">{{ detail.pickupLocation }}</span>
+          </div>
+        </div>
+        <div class="info-item">
+          <el-icon class="info-icon"><Promotion /></el-icon>
+          <div class="info-content">
+            <span class="info-label">送达地点</span>
+            <span class="info-value">{{ detail.deliveryLocation }}</span>
+          </div>
+        </div>
+        <div class="info-item">
+          <el-icon class="info-icon"><Clock /></el-icon>
+          <div class="info-content">
+            <span class="info-label">接单截止</span>
+            <span class="info-value">{{ formatDateTime(detail.acceptDeadline) || '无' }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 时间线 -->
+      <el-card class="timeline-card" shadow="never">
+        <div class="timeline">
+          <div class="timeline-item" :class="{ active: detail.createdAt }">
+            <div class="timeline-dot"></div>
+            <div class="timeline-line"></div>
+            <div class="timeline-content">
+              <span class="timeline-title">发布代取</span>
+              <span class="timeline-time">{{ formatDateTime(detail.createdAt) }}</span>
+            </div>
+          </div>
+          <div class="timeline-item" :class="{ active: detail.acceptedAt }">
+            <div class="timeline-dot"></div>
+            <div class="timeline-line"></div>
+            <div class="timeline-content">
+              <span class="timeline-title">有人接单</span>
+              <span class="timeline-time">{{ detail.acceptedAt ? formatDateTime(detail.acceptedAt) : '等待中...' }}</span>
+            </div>
+          </div>
+          <div v-if="detail.status !== 'CANCELLED'" class="timeline-item" :class="{ active: detail.completedAt }">
+            <div class="timeline-dot"></div>
+            <div class="timeline-content">
+              <span class="timeline-title">代取完成</span>
+              <span class="timeline-time">{{ detail.completedAt ? formatDateTime(detail.completedAt) : '进行中...' }}</span>
+            </div>
+          </div>
+          <div v-else class="timeline-item active cancelled">
+            <div class="timeline-dot"></div>
+            <div class="timeline-content">
+              <span class="timeline-title">已取消</span>
+              <span class="timeline-time">{{ formatDateTime(detail.updatedAt || detail.createdAt) }}</span>
             </div>
           </div>
         </div>
+      </el-card>
 
-        <!-- Acceptor Info -->
-        <div v-if="detail.acceptor" class="section">
-          <h3>接单者信息</h3>
-          <div class="user-info" @click="goUserPublicProfile(detail.acceptor?.userId)">
-            <el-avatar :size="40" :src="acceptorAvatarUrl" icon="UserFilled" />
-            <div class="user-text">
-              <span class="user-name clickable">{{ detail.acceptor?.nickname || '匿名用户' }}</span>
-            </div>
+      <!-- 参与者 -->
+      <div class="participants">
+        <el-card class="participant-card" shadow="never" @click="goUserPublicProfile(detail.publisher?.userId)">
+          <el-avatar :size="48" :src="publisherAvatarUrl" icon="UserFilled" />
+          <div class="participant-info">
+            <el-tag size="small" type="primary">发布者</el-tag>
+            <span class="participant-name clickable">{{ detail.publisher?.nickname || '匿名用户' }}</span>
           </div>
-        </div>
+        </el-card>
+        <el-card v-if="detail.acceptor" class="participant-card" shadow="never" @click="goUserPublicProfile(detail.acceptor?.userId)">
+          <el-avatar :size="48" :src="acceptorAvatarUrl" icon="UserFilled" />
+          <div class="participant-info">
+            <el-tag size="small" type="success">接单者</el-tag>
+            <span class="participant-name clickable">{{ detail.acceptor?.nickname || '匿名用户' }}</span>
+          </div>
+        </el-card>
+      </div>
 
-        <!-- Credential Image -->
-        <div v-if="credentialUrl" class="section">
-          <h3>取件凭证</h3>
-          <el-image
-              :src="credentialUrl"
-              :preview-src-list="[credentialUrl]"
-              fit="contain"
-              class="proof-image"
-          />
-        </div>
+      <!-- 取件凭证 -->
+      <el-card v-if="credentialUrl" class="image-card" shadow="never">
+        <template #header><span>取件凭证</span></template>
+        <el-image :src="credentialUrl" :preview-src-list="[credentialUrl]" fit="contain" class="proof-image" />
+      </el-card>
 
-        <!-- Completion Proof -->
-        <div v-if="completionProofUrl" class="section">
-          <h3>完成凭证</h3>
-          <el-image
-              :src="completionProofUrl"
-              :preview-src-list="[completionProofUrl]"
-              fit="contain"
-              class="proof-image"
-          />
-        </div>
+      <!-- 完成凭证 -->
+      <el-card v-if="completionProofUrl" class="image-card" shadow="never">
+        <template #header><span>完成凭证</span></template>
+        <el-image :src="completionProofUrl" :preview-src-list="[completionProofUrl]" fit="contain" class="proof-image" />
+      </el-card>
 
-        <!-- Evaluation Section -->
-        <div v-if="detail.status === 'COMPLETED'" class="section">
-          <h3>评价</h3>
-          <template v-if="evaluation">
-            <div class="eval-display">
+      <!-- 评价 -->
+      <el-card v-if="detail.status === 'COMPLETED'" class="eval-card" shadow="never">
+        <template #header><span>评价</span></template>
+        <template v-if="evaluation">
+          <div class="eval-display">
+            <div class="eval-header">
               <el-tag :type="getRatingTag(evaluation.ratingLevel)" size="large">
                 {{ getRatingLabel(evaluation.ratingLevel) }}
               </el-tag>
-              <p class="eval-content">{{ evaluation.content }}</p>
             </div>
-          </template>
-          <template v-else-if="canEvaluate">
-            <el-form :model="evalForm" label-width="60px">
-              <el-form-item label="评分">
-                <el-radio-group v-model="evalForm.ratingLevel">
-                  <el-radio value="GOOD">好评</el-radio>
-                  <el-radio value="NEUTRAL">中评</el-radio>
-                  <el-radio value="BAD">差评</el-radio>
-                </el-radio-group>
-              </el-form-item>
-              <el-form-item label="评价">
-                <el-input
-                    v-model="evalForm.content"
-                    type="textarea"
-                    :rows="3"
-                    placeholder="请输入评价内容（差评必填）"
-                    :maxlength="300"
-                    show-word-limit
-                />
-              </el-form-item>
-              <el-form-item>
-                <el-button type="primary" :loading="evalLoading" @click="submitEval">
-                  提交评价
-                </el-button>
-              </el-form-item>
-            </el-form>
-          </template>
-          <el-empty v-else description="暂无评价" :image-size="80" />
-        </div>
-
-        <!-- Action Buttons -->
-        <div class="actions">
-          <!-- Publisher + WAITING_PAYMENT -->
-          <template v-if="isPublisher && detail.status === 'WAITING_PAYMENT'">
-            <div v-if="countdown" class="countdown-section">
-              <span v-if="countdown !== '已过期'" class="countdown-text">
-                支付剩余：<strong>{{ countdown }}</strong>
-              </span>
-              <el-tag v-else type="danger">支付已超时</el-tag>
-            </div>
-            <el-button
-                type="primary"
-                @click="handlePay"
-                :disabled="countdown === '已过期' || !countdown"
-            >
-              继续支付
-            </el-button>
-            <el-button type="danger" @click="handleCancel">取消订单</el-button>
-          </template>
-
-          <!-- Publisher + WAITING_ACCEPT -->
-          <template v-if="isPublisher && detail.status === 'WAITING_ACCEPT'">
-            <el-button type="danger" @click="handleCancel">取消订单</el-button>
-          </template>
-
-          <!-- Approved user + WAITING_ACCEPT -->
-          <template v-if="!isPublisher && userStore.isApproved && detail.status === 'WAITING_ACCEPT'">
-            <el-button type="success" :loading="actionLoading" @click="handleAccept">
-              接单
-            </el-button>
-          </template>
-
-          <!-- Acceptor + IN_PROGRESS -->
-          <template v-if="isAcceptor && detail.status === 'IN_PROGRESS' && !completionProofUrl">
-            <div>
-              <el-upload
-                  ref="proofUploadRef"
-                  :auto-upload="false"
-                  :limit="1"
-                  accept="image/jpeg,image/png"
-                  :on-change="onProofChange"
-              >
-                <el-button type="primary">选择完成凭证</el-button>
-              </el-upload>
-              <div class="upload-tip">JPG/PNG，不超过5MB，最多上传一张</div>
-            </div>
-            <el-button
-                type="success"
-                :loading="actionLoading"
-                :disabled="!proofFile"
-                @click="handleUploadProof"
-            >
-              上传完成凭证
-            </el-button>
-          </template>
-
-          <!-- Publisher + IN_PROGRESS + proof uploaded -->
-          <template v-if="isPublisher && detail.status === 'IN_PROGRESS' && completionProofUrl">
-            <el-button type="success" :loading="actionLoading" @click="handleConfirm">
-              确认完成
-            </el-button>
-          </template>
-        </div>
+            <p class="eval-content">{{ evaluation.content }}</p>
+          </div>
+        </template>
+        <template v-else-if="canEvaluate">
+          <el-form :model="evalForm" label-width="60px">
+            <el-form-item label="评分">
+              <el-radio-group v-model="evalForm.ratingLevel">
+                <el-radio value="GOOD">好评</el-radio>
+                <el-radio value="NEUTRAL">中评</el-radio>
+                <el-radio value="BAD">差评</el-radio>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item label="评价">
+              <el-input
+                  v-model="evalForm.content"
+                  type="textarea"
+                  :rows="3"
+                  placeholder="请输入评价内容（差评必填）"
+                  :maxlength="300"
+                  show-word-limit
+              />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" :loading="evalLoading" @click="submitEval">提交评价</el-button>
+            </el-form-item>
+          </el-form>
+        </template>
+        <el-empty v-else description="暂无评价" :image-size="80" />
       </el-card>
+
+      <!-- 操作按钮 -->
+      <div class="actions">
+        <template v-if="isPublisher && detail.status === 'WAITING_ACCEPT'">
+          <el-button size="large" @click="handleCancel">取消订单</el-button>
+        </template>
+        <template v-if="!isPublisher && userStore.isApproved && detail.status === 'WAITING_ACCEPT'">
+          <el-button type="primary" size="large" :loading="actionLoading" @click="handleAccept">接单</el-button>
+        </template>
+        <template v-if="isAcceptor && detail.status === 'IN_PROGRESS' && !completionProofUrl">
+          <div class="upload-area">
+            <el-upload ref="proofUploadRef" :auto-upload="false" :limit="1" accept="image/jpeg,image/png" :on-change="onProofChange">
+              <el-button size="large">选择完成凭证</el-button>
+            </el-upload>
+            <div class="upload-tip">JPG/PNG，不超过5MB</div>
+          </div>
+          <el-button type="primary" size="large" :loading="actionLoading" :disabled="!proofFile" @click="handleUploadProof">
+            上传完成凭证
+          </el-button>
+        </template>
+        <template v-if="isPublisher && detail.status === 'IN_PROGRESS' && completionProofUrl">
+          <el-button type="primary" size="large" :loading="actionLoading" @click="handleConfirm">确认完成</el-button>
+        </template>
+      </div>
     </template>
   </div>
 </template>
@@ -199,7 +205,6 @@ import {
   uploadCompletionProof,
   confirmComplete,
   cancelPickup,
-  getPaymentEntry,
   submitEvaluation,
   getEvaluationEligibility
 } from '@/api/pickup'
@@ -223,10 +228,6 @@ const completionProofUrl = ref('')
 const publisherAvatarUrl = ref('')
 const acceptorAvatarUrl = ref('')
 
-const expireAt = ref(null)
-const countdown = ref('')
-let countdownTimer = null
-
 const campusMap = {
   GULOU: '鼓楼校区',
   XIANLIN: '仙林校区',
@@ -237,14 +238,12 @@ const campusLabel = (code) => campusMap[code] || code
 
 const cancelReasonMap = {
   USER_CANCELLED: '用户取消',
-  PAYMENT_EXPIRED: '支付超时',
   ACCEPT_DEADLINE_EXPIRED: '接单截止超时',
   SYSTEM_CANCELLED: '系统取消'
 }
 const cancelReasonLabel = (reason) => cancelReasonMap[reason] || reason
 
 const statusMap = {
-  WAITING_PAYMENT: '待支付',
   WAITING_ACCEPT: '待接单',
   IN_PROGRESS: '进行中',
   COMPLETED: '已完成',
@@ -253,7 +252,6 @@ const statusMap = {
 
 const statusTagType = computed(() => {
   const map = {
-    WAITING_PAYMENT: 'warning',
     WAITING_ACCEPT: 'info',
     IN_PROGRESS: '',
     COMPLETED: 'success',
@@ -263,6 +261,11 @@ const statusTagType = computed(() => {
 })
 
 const statusLabel = computed(() => statusMap[detail.value?.status] || detail.value?.status)
+
+const statusIcon = computed(() => {
+  const map = { WAITING_ACCEPT: '⏳', IN_PROGRESS: '🚀', COMPLETED: '✅', CANCELLED: '❌' }
+  return map[detail.value?.status] || '📦'
+})
 
 const isPublisher = computed(() => {
   return userStore.userInfo?.userId && detail.value && userStore.userInfo.userId === detail.value.publisher?.userId
@@ -291,37 +294,6 @@ function formatDateTime(dateStr) {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
-
-function updateCountdown() {
-  if (!expireAt.value) {
-    countdown.value = ''
-    return
-  }
-  const diff = new Date(expireAt.value) - Date.now()
-  if (diff <= 0) {
-    countdown.value = '已过期'
-    if (countdownTimer) {
-      clearInterval(countdownTimer)
-      countdownTimer = null
-      // 自动刷新详情，以获取后端已取消的状态
-      loadDetail()
-    }
-    return
-  }
-  const min = Math.floor(diff / 60000)
-  const sec = Math.floor((diff % 60000) / 1000)
-  countdown.value = `${min}:${String(sec).padStart(2, '0')}`
-}
-
-function startCountdown() {
-  if (countdownTimer) clearInterval(countdownTimer)
-  if (expireAt.value) {
-    updateCountdown()
-    if (countdown.value !== '已过期') {
-      countdownTimer = setInterval(updateCountdown, 1000)
-    }
-  }
 }
 
 function revokeBlobURL(url) {
@@ -376,20 +348,13 @@ async function loadDetail() {
       } catch { /* ignore */ }
     }
 
-    if (detail.value.status === 'WAITING_PAYMENT' && isPublisher.value && userStore.isLoggedIn) {
-      try {
-        const payRes = await getPaymentEntry(detail.value.pickupId)
-        expireAt.value = payRes?.expireAt || null
-      } catch {
-        expireAt.value = null
-      }
-      startCountdown()
-    }
-
     if (detail.value.status === 'COMPLETED' && userStore.isLoggedIn) {
       try {
         const evalRes = await getEvaluationEligibility(route.params.id)
         canEvaluate.value = evalRes?.canEvaluate || false
+        if (evalRes?.evaluation) {
+          evaluation.value = evalRes.evaluation
+        }
       } catch { /* ignore */ }
     } else {
       canEvaluate.value = false
@@ -398,17 +363,6 @@ async function loadDetail() {
     // error handled by interceptor
   } finally {
     loading.value = false
-  }
-}
-
-async function handlePay() {
-  try {
-    const res = await getPaymentEntry(detail.value.pickupId)
-    if (res?.payEntry) {
-      window.location.href = res.payEntry
-    }
-  } catch {
-    // error handled by interceptor
   }
 }
 
@@ -489,12 +443,8 @@ async function handleCancel() {
       }
     })
     actionLoading.value = true
-    const res = await cancelPickup(detail.value.pickupId, { reason: reason?.trim() })
-    if (res?.paymentStatus === 'REFUNDED') {
-      ElMessage.success('订单已取消，退款已发起')
-    } else {
-      ElMessage.success('订单已取消')
-    }
+    await cancelPickup(detail.value.pickupId, { reason: reason?.trim() })
+    ElMessage.success('订单已取消')
     loadDetail()
   } catch (e) {
     if (e !== 'cancel' && e?.action !== 'cancel') {
@@ -518,9 +468,14 @@ async function submitEval() {
   try {
     await submitEvaluation(route.params.id, evalForm)
     ElMessage.success('评价成功')
+    evaluation.value = {
+      ratingLevel: evalForm.ratingLevel,
+      content: evalForm.content,
+      createdAt: new Date().toISOString()
+    }
+    canEvaluate.value = false
     evalForm.ratingLevel = 'GOOD'
     evalForm.content = ''
-    loadDetail()
   } catch {
     // error handled by interceptor
   } finally {
@@ -529,11 +484,6 @@ async function submitEval() {
 }
 
 onUnmounted(() => {
-  if (countdownTimer) {
-    clearInterval(countdownTimer)
-    countdownTimer = null
-  }
-  // 释放所有 Blob URL
   revokeBlobURL(credentialUrl.value)
   revokeBlobURL(completionProofUrl.value)
   revokeBlobURL(publisherAvatarUrl.value)
@@ -549,124 +499,298 @@ onMounted(() => {
 .pickup-detail {
   max-width: 800px;
   margin: 0 auto;
+  padding-bottom: 24px;
 }
 
-.detail-card {
-  margin-top: 20px;
-}
-
-.status-row {
+/* 状态横幅 */
+.status-banner {
+  margin-top: 16px;
+  padding: 20px 24px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-  gap: 8px;
+  color: #fff;
 }
 
-.status-left {
+.status-WAITING_ACCEPT { background: linear-gradient(135deg, #409eff, #66b1ff); }
+.status-IN_PROGRESS { background: linear-gradient(135deg, #e6a23c, #f0c78a); }
+.status-COMPLETED { background: linear-gradient(135deg, #67c23a, #95d475); }
+.status-CANCELLED { background: linear-gradient(135deg, #909399, #b1b3b8); }
+
+.banner-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+}
+
+.status-icon {
+  font-size: 24px;
+}
+
+.status-text {
+  font-size: 20px;
+  font-weight: 600;
 }
 
 .cancel-reason {
-  color: #f56c6c;
   font-size: 14px;
-  font-weight: 500;
+  opacity: 0.9;
 }
 
-.reward {
-  font-size: 24px;
-  font-weight: bold;
-  color: #e6a23c;
+.banner-reward {
+  font-size: 32px;
+  font-weight: 700;
 }
 
-.detail-info {
-  margin-bottom: 24px;
+.reward-unit {
+  font-size: 14px;
+  font-weight: 400;
+  opacity: 0.8;
 }
 
-.section {
-  margin-bottom: 24px;
+/* 物品描述 */
+.desc-card {
+  margin-top: 16px;
 }
 
-.section h3 {
-  font-size: 16px;
-  color: #303133;
-  margin-bottom: 12px;
-  border-bottom: 1px solid #ebeef5;
-  padding-bottom: 8px;
+.desc-label {
+  font-size: 13px;
+  color: #909399;
+  margin-bottom: 8px;
 }
 
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  cursor: pointer;
-  padding: 8px 0;
-}
-
-.user-name {
+.desc-text {
   font-size: 15px;
   color: #303133;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
-.user-name.clickable {
+/* 信息网格 */
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.info-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+}
+
+.info-icon {
+  font-size: 20px;
+  color: #409eff;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.info-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.info-label {
+  font-size: 12px;
+  color: #909399;
+}
+
+.info-value {
+  font-size: 14px;
+  color: #303133;
+  word-break: break-all;
+}
+
+/* 时间线 */
+.timeline-card {
+  margin-top: 16px;
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+}
+
+.timeline-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  position: relative;
+  padding-bottom: 24px;
+}
+
+.timeline-item:last-child {
+  padding-bottom: 0;
+}
+
+.timeline-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #dcdfe6;
+  flex-shrink: 0;
+  margin-top: 4px;
+  z-index: 1;
+}
+
+.timeline-item.active .timeline-dot {
+  background: #409eff;
+  box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.2);
+}
+
+.timeline-item.cancelled .timeline-dot {
+  background: #f56c6c;
+  box-shadow: 0 0 0 3px rgba(245, 108, 108, 0.2);
+}
+
+.timeline-line {
+  position: absolute;
+  left: 5px;
+  top: 16px;
+  width: 2px;
+  height: calc(100% - 10px);
+  background: #e4e7ed;
+}
+
+.timeline-item.active .timeline-line {
+  background: #409eff;
+}
+
+.timeline-item.cancelled .timeline-line {
+  background: #f56c6c;
+}
+
+.timeline-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.timeline-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #303133;
+}
+
+.timeline-item:not(.active) .timeline-title {
+  color: #c0c4cc;
+}
+
+.timeline-time {
+  font-size: 13px;
+  color: #909399;
+}
+
+/* 参与者 */
+.participants {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.participant-card {
+  cursor: pointer;
+  transition: box-shadow 0.2s;
+}
+
+.participant-card:hover {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+}
+
+.participant-card :deep(.el-card__body) {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+}
+
+.participant-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.participant-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: #303133;
+}
+
+.participant-name.clickable {
   color: #409eff;
 }
 
-.user-name.clickable:hover {
+.participant-name.clickable:hover {
   text-decoration: underline;
 }
 
+/* 图片卡片 */
+.image-card {
+  margin-top: 16px;
+}
+
 .proof-image {
-  max-width: 400px;
-  max-height: 300px;
+  max-width: 100%;
+  max-height: 400px;
   border-radius: 8px;
   border: 1px solid #ebeef5;
+}
+
+/* 评价 */
+.eval-card {
+  margin-top: 16px;
 }
 
 .eval-display {
   display: flex;
   flex-direction: column;
+  gap: 12px;
+}
+
+.eval-header {
+  display: flex;
+  align-items: center;
   gap: 8px;
 }
 
 .eval-content {
   color: #606266;
   margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
 }
 
-.countdown-section {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  margin-bottom: 8px;
-}
-
-.countdown-text {
-  color: #e6a23c;
-  font-size: 14px;
-}
-
-.countdown-text strong {
-  font-weight: 700;
-  font-size: 16px;
-}
-
+/* 操作按钮 */
 .actions {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid #ebeef5;
+  margin-top: 20px;
+  padding: 20px;
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+}
+
+.upload-area {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .upload-tip {
   font-size: 12px;
   color: #909399;
-  margin-top: 8px;
 }
 </style>

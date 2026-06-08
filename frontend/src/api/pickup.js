@@ -10,7 +10,6 @@ export const getPickupDetail = (id) => request.get(`/pickup-requests/${id}`)
 export const getPickupCredential = (id) =>
     request.get(`/pickup-requests/${id}/credential`, { responseType: 'blob' })
 
-export const getPaymentEntry = (id) => request.get(`/pickup-requests/${id}/payment-entry`)
 export const acceptPickup = (id) => request.post(`/pickup-requests/${id}/accept`)
 
 // [修复] 删除手动 Content-Type，交由 axios 自动处理
