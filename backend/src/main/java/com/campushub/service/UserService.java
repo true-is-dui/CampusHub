@@ -85,6 +85,32 @@ public interface UserService {
      * 状态变更前作为前置门槛调用，状态读取归口本 owner service。
      */
     void ensureCertified(Long userId);
+
+    /**
+     * 读取用户当前积分余额（读库，不信任 JWT 快照）；用户不存在抛 404。
+     *
+     * <p>积分余额字段（{@code point_balance}）物理寄存在 users 表，故其读取归口本 owner service；
+     * 其他模块（如 {@code PointService}）不直接访问 {@code UserMapper}。
+     */
+    long getPointBalance(Long userId);
+
+    /**
+     * 应用一次积分变动并落库，返回变动后的余额（balanceAfter，供调用方写流水）。
+     *
+     * <p>用户表写入收口本 owner service：读用户 → {@code User.addPoints/deductPoints}（领域方法）
+     * → <b>条件更新</b>（{@code WHERE point_balance=旧值}，防并发超扣，与代取状态条件更新同手法）。
+     *
+     * <p>{@code checkInDate != null} 表示这是一次签到变动：同笔写入 {@code last_check_in_date}，
+     * 并带「旧签到日期」条件（{@code WHERE last_check_in_date IS NULL OR <> checkInDate}），
+     * 影响行数 0 视为当日已签到 → 抛 409 {@code ALREADY_CHECKED_IN_TODAY}。
+     * {@code checkInDate == null} 表示普通积分变动：仅带余额条件，影响行数 0 视为并发冲突。
+     *
+     * @param delta       变动量（正=入账，负=出账/扣减）
+     * @param checkInDate 签到日期；非签到变动传 null
+     * @return 变动后的余额
+     * @throws com.campushub.common.BusinessException 余额不足 409 {@code INSUFFICIENT_POINTS}；
+     *         重复签到 409 {@code ALREADY_CHECKED_IN_TODAY}；并发冲突 409
+     *         {@code DUPLICATE_OR_CONFLICTED_OPERATION}；用户不存在 404
+     */
+    long applyPointChange(Long userId, long delta, java.time.LocalDate checkInDate);
 }
-
-

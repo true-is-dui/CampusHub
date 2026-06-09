@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -187,6 +188,49 @@ public class UserServiceImpl implements UserService {
             throw new BusinessException(ErrorCode.FORBIDDEN, ErrorReason.AUTH_STATUS_NOT_ALLOWED,
                     "需实名认证通过后才能参与代取服务");
         }
+    }
+
+    @Override
+    public long getPointBalance(Long userId) {
+        User user = requireUser(userId);
+        return user.getPointBalance() == null ? 0L : user.getPointBalance();
+    }
+
+    @Override
+    @Transactional
+    public long applyPointChange(Long userId, long delta, LocalDate checkInDate) {
+        User user = requireUser(userId);
+        long before = user.getPointBalance() == null ? 0L : user.getPointBalance();
+
+        if (delta < 0) {
+            // 余额不足是用户账户规则，归 owner service 判定并翻译。
+            if (before < -delta) {
+                throw new BusinessException(ErrorCode.CONFLICT, ErrorReason.INSUFFICIENT_POINTS);
+            }
+            user.deductPoints(-delta);
+        } else {
+            user.addPoints(delta);
+        }
+
+        // 条件更新：余额带「旧值」条件防并发超扣；签到变动再带「旧签到日期」条件防当日重复签到。
+        var wrapper = Wrappers.<User>lambdaUpdate()
+                .eq(User::getId, userId)
+                .eq(User::getPointBalance, before);
+        if (checkInDate != null) {
+            user.setLastCheckInDate(checkInDate);
+            wrapper.and(w -> w.isNull(User::getLastCheckInDate)
+                    .or().ne(User::getLastCheckInDate, checkInDate));
+        }
+
+        int affected = userMapper.update(user, wrapper);
+        if (affected == 0) {
+            if (checkInDate != null) {
+                throw new BusinessException(ErrorCode.CONFLICT, ErrorReason.ALREADY_CHECKED_IN_TODAY);
+            }
+            throw new BusinessException(ErrorCode.CONFLICT,
+                    ErrorReason.DUPLICATE_OR_CONFLICTED_OPERATION, "积分余额已被并发修改，请重试");
+        }
+        return user.getPointBalance();
     }
 
     private User requireUser(Long userId) {
