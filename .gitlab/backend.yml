@@ -3,6 +3,7 @@
 stages:
   - test
   - build
+  - docker-build
 
 variables:
   MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
@@ -33,3 +34,20 @@ backend-build:
     when: always
     paths:
       - backend/target/*.jar
+
+backend-docker-build:
+  stage: docker-build
+  image: docker:27
+  services:
+    - docker:27-dind
+  variables:
+    DOCKER_TLS_CERT_DIR: "/certs"
+    BACKEND_IMAGE: "ghcr.io/$GHCR_NAMESPACE/campushub-backend:latest"
+  dependencies:
+    - backend-build
+  script:
+    - echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+    - docker build -f ./backend/Dockerfile-prod -t "$BACKEND_IMAGE" ./backend
+    - docker push "$BACKEND_IMAGE"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "dev"'

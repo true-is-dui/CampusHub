@@ -1,7 +1,7 @@
 services:
   mysql:
     image: mysql:8.0
-    container_name: campushub-mysql-test
+    container_name: campushub-mysql-prod
     restart: unless-stopped
 
     environment:
@@ -11,11 +11,8 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       TZ: Asia/Shanghai
 
-    ports:
-      - "3307:3306"
-
     volumes:
-      - mysql-data-test:/var/lib/mysql
+      - mysql-data-prod:/var/lib/mysql
       - ./mysql/init:/docker-entrypoint-initdb.d
       - ./mysql/conf/my.cnf:/etc/mysql/conf.d/my.cnf
 
@@ -27,25 +24,19 @@ services:
       start_period: 30s
 
     networks:
-      - campushub-net-test
+      - campushub-net-prod
 
   frontend:
-    build:
-      context: ../../frontend
-      dockerfile: Dockerfile-test
-
-    container_name: campushub-frontend-test
+    image: ${FRONTEND_IMAGE}
+    container_name: campushub-frontend-prod
     restart: unless-stopped
 
     networks:
-      - campushub-net-test
+      - campushub-net-prod
 
   backend:
-    build:
-      context: ../../backend
-      dockerfile: Dockerfile-test
-
-    container_name: campushub-backend-test
+    image: ${BACKEND_IMAGE}
+    container_name: campushub-backend-prod
     restart: unless-stopped
 
     env_file:
@@ -59,18 +50,18 @@ services:
       FILE_STORAGE_ROOT: ${FILE_STORAGE_ROOT}
 
     volumes:
-      - backend-file-root-test:${FILE_STORAGE_ROOT}
+      - backend-file-root-prod:${FILE_STORAGE_ROOT}
 
     depends_on:
       mysql:
         condition: service_healthy
 
     networks:
-      - campushub-net-test
+      - campushub-net-prod
 
   nginx:
     image: nginx:1.27-alpine
-    container_name: campushub-nginx-test
+    container_name: campushub-nginx-prod
     restart: unless-stopped
 
     ports:
@@ -86,12 +77,12 @@ services:
         condition: service_started
 
     networks:
-      - campushub-net-test
+      - campushub-net-prod
 
 volumes:
-  mysql-data-test:
-  backend-file-root-test:
+  mysql-data-prod:
+  backend-file-root-prod:
 
 networks:
-  campushub-net-test:
+  campushub-net-prod:
     driver: bridge
