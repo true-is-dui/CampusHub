@@ -57,6 +57,8 @@ class UserModuleWebTest {
     private com.campushub.service.NotificationService notificationService;
     @MockitoBean
     private com.campushub.service.EvaluationService evaluationService;
+    @MockitoBean
+    private com.campushub.service.PointService pointService;
     // 拦截器依赖 JwtUtil；Web 切片不加载它，需 MockitoBean 注入
     @MockitoBean
     private JwtUtil jwtUtil;

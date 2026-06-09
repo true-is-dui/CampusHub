@@ -21,6 +21,7 @@ import com.campushub.entity.enums.ReviewStatus;
 import com.campushub.mapper.VerificationReviewMapper;
 import com.campushub.service.FileStorageService;
 import com.campushub.service.NotificationService;
+import com.campushub.service.PointService;
 import com.campushub.service.UserService;
 import com.campushub.service.VerificationReviewService;
 import com.campushub.service.dto.StoredFileContent;
@@ -50,6 +51,7 @@ public class VerificationReviewServiceImpl implements VerificationReviewService 
     private final UserService userService;
     private final FileStorageService fileStorageService;
     private final NotificationService notificationService;
+    private final PointService pointService;
 
     @Override
     @Transactional
@@ -137,6 +139,8 @@ public class VerificationReviewServiceImpl implements VerificationReviewService 
                 review.getSubmittedStudentId(), review.getSubmittedRealName());
         review.markApproved(adminId);
         verificationReviewMapper.updateById(review);
+        // 认证通过赠送初始积分（每学号一次：审核通过本身每学号唯一，故此处一次性赠送）。
+        pointService.grantInitialPoints(review.getUserId());
         notificationService.createNotice(review.getUserId(), NotificationType.VERIFICATION,
                 "实名认证已通过", "您的实名认证申请已通过审核，现在可以发布和接单代取服务。",
                 null, null);

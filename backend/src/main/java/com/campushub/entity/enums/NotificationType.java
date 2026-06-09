@@ -10,7 +10,7 @@ public enum NotificationType {
     VERIFICATION,
     /** 代取业务通知：被接单、完成凭证上传、确认完成 */
     PICKUP,
-    /** 支付通知：支付成功、关闭、退款、结算 */
+    /** 积分/报酬通知：积分入账、退回（如完成结款、取消退回） */
     PAYMENT,
     /** 评价通知：收到评价 */
     EVALUATION

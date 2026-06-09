@@ -1,5 +1,6 @@
 stages:
   - trigger
+  - deploy
 
 # 触发后端 pipeline
 backend:
@@ -7,6 +8,7 @@ backend:
   trigger:
     include:
       - local: .gitlab/backend.yml
+    strategy: depend
   rules:
     - changes:
         - backend/**/*
@@ -17,6 +19,21 @@ frontend:
   trigger:
     include:
       - local: .gitlab/frontend.yml
+    strategy: depend
   rules:
     - changes:
         - frontend/**/*
+
+deploy:
+  stage: deploy
+  trigger:
+    include:
+      - local: .gitlab/deploy.yml
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - backend/**/*
+        - frontend/**/*
+        - deploy/prod/**/*
+        - .gitlab-ci.yml
+        - .gitlab/**/*

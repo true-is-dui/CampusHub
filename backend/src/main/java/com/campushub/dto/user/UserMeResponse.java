@@ -45,4 +45,7 @@ public class UserMeResponse {
 
     /** 用户角色（USER / ADMIN）。 */
     private final UserRole role;
+
+    /** 当前用户的平台积分余额（>=0），积分为平台内虚拟资产、不可充值提现。 */
+    private final Long pointBalance;
 }

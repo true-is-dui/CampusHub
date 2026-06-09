@@ -35,8 +35,11 @@ class VerificationReviewServiceImplTest {
     private final UserService userService = mock(UserService.class);
     private final FileStorageService fileStorageService = mock(FileStorageService.class);
     private final NotificationService notificationService = mock(NotificationService.class);
+    private final com.campushub.service.PointService pointService =
+            mock(com.campushub.service.PointService.class);
     private final VerificationReviewServiceImpl service =
-            new VerificationReviewServiceImpl(reviewMapper, userService, fileStorageService, notificationService);
+            new VerificationReviewServiceImpl(reviewMapper, userService, fileStorageService,
+                    notificationService, pointService);
 
     @Test
     void submitVerification_createsReviewAndDelegatesUserStatus() {
@@ -84,6 +87,8 @@ class VerificationReviewServiceImplTest {
         assertThat(review.getReviewerId()).isEqualTo(99L);
         verify(userService).markVerificationApproved(7L, "20260001", "张三");
         verify(reviewMapper).updateById(review);
+        // 认证通过赠送初始积分。
+        verify(pointService).grantInitialPoints(7L);
         verify(notificationService).createNotice(eq(7L), eq(NotificationType.VERIFICATION),
                 any(), any(), any(), any());
     }
@@ -103,6 +108,8 @@ class VerificationReviewServiceImplTest {
         assertThat(review.getRejectReason()).isEqualTo("材料模糊");
         verify(userService).markVerificationRejected(7L);
         verify(reviewMapper).updateById(review);
+        // 驳回不赠送积分。
+        verify(pointService, never()).grantInitialPoints(any());
         verify(notificationService).createNotice(eq(7L), eq(NotificationType.VERIFICATION),
                 any(), any(), any(), any());
     }

@@ -16,8 +16,9 @@ import java.time.LocalDateTime;
 /**
  * 代取请求实体，映射 pickup_requests 表，是代取业务的唯一主表。
  *
- * <p>统一维护代取业务状态流转：待支付 → 待接单 → 进行中 → 已完成 / 已取消。
- * 支付状态由 PaymentRecord 维护，业务状态仍以本表 status 为准。
+ * <p>统一维护代取业务状态流转：待接单 → 进行中 → 已完成 / 已取消。
+ * 有报酬服务的报酬以平台积分计价：发布即扣减发布方积分、完成转入接单方、
+ * 待接单阶段取消退回发布方；积分变动由 PointService 维护，业务状态仍以本表 status 为准。
  *
  * <p>本类是富领域模型，领域方法只维护对象自身状态和少量展示规则
  * （markAccepted、canViewPickupCredential 等），供 Service 层调用。
@@ -61,9 +62,6 @@ public class PickupRequest {
     /** 完成凭证文件 ID，接单方上传 */
     private Long completionProofFileId;
 
-    /** 支付记录 ID，无报酬服务为空 */
-    private Long paymentId;
-
     /** 代取请求状态 */
     private PickupStatus status;
 
@@ -95,13 +93,7 @@ public class PickupRequest {
 
     // ---------------- 领域方法（仅供 Service 层内部调用） ----------------
 
-    /** 有报酬服务发布后进入待支付，关联支付记录 */
-    public void markWaitingPayment(Long paymentId) {
-        this.paymentId = paymentId;
-        this.status = PickupStatus.WAITING_PAYMENT;
-    }
-
-    /** 无报酬发布成功或有报酬支付成功后进入待接单 */
+    /** 发布成功后进入待接单（无报酬直接进入；有报酬在扣减发布方积分后进入） */
     public void markWaitingAccept() {
         this.status = PickupStatus.WAITING_ACCEPT;
     }

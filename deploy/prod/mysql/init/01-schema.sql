@@ -8,12 +8,6 @@
 -- 或在客户端中先选库再执行本文件的 CREATE TABLE 部分。
 -- =====================================================================
 
-CREATE DATABASE IF NOT EXISTS campushub
-    DEFAULT CHARSET = utf8mb4
-    COLLATE = utf8mb4_unicode_ci;
-
-USE campushub;
-
 -- ---------------------------------------------------------------------
 -- 1. users 用户表
 --    avatar_file_id 的外键在 stored_files 建表后通过 ALTER TABLE 回填，
@@ -32,15 +26,12 @@ CREATE TABLE users (
     contact VARCHAR(100) NULL COMMENT '用户主动填写的公开联系方式，选填',
     auth_status VARCHAR(20) NOT NULL DEFAULT 'UNVERIFIED' COMMENT 'UNVERIFIED/REVIEWING/APPROVED/REJECTED',
     role VARCHAR(20) NOT NULL DEFAULT 'USER' COMMENT 'USER/ADMIN',
-    point_balance BIGINT NOT NULL DEFAULT 0 COMMENT '平台积分余额，纯虚拟、不可充值提现',
-    last_check_in_date DATE NULL COMMENT '最近一次签到日期，用于每日签到去重',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT uk_users_username UNIQUE (username),
     CONSTRAINT uk_users_student_id UNIQUE (student_id),
     CONSTRAINT chk_users_auth_status CHECK (auth_status IN ('UNVERIFIED','REVIEWING','APPROVED','REJECTED')),
     CONSTRAINT chk_users_role CHECK (role IN ('USER','ADMIN')),
-    CONSTRAINT chk_users_point_balance CHECK (point_balance >= 0),
     INDEX idx_users_auth_status (auth_status),
     INDEX idx_users_role (role),
     INDEX idx_users_created_at (created_at)
@@ -101,25 +92,40 @@ CREATE TABLE verification_reviews (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='实名认证审核记录表';
 
 -- ---------------------------------------------------------------------
--- 4. point_transactions 积分流水表
---    记录认证赠送、签到、发布扣减、取消退回、完成入账；冗余 balance_after 便于展示。
---    related_pickup_id 仅用于代取相关流水溯源，不建业务外键。
+-- 4. payment_records 支付记录表
 -- ---------------------------------------------------------------------
-CREATE TABLE point_transactions (
+CREATE TABLE payment_records (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id BIGINT NOT NULL COMMENT '流水所属用户ID',
-    type VARCHAR(30) NOT NULL COMMENT 'EARN_VERIFICATION/EARN_CHECK_IN/SPEND_PUBLISH/REFUND_CANCEL/INCOME_COMPLETE',
-    amount BIGINT NOT NULL COMMENT '积分变动量，正数入账，负数出账',
-    balance_after BIGINT NOT NULL COMMENT '本次变动后的积分余额',
-    related_pickup_id BIGINT NULL COMMENT '关联代取请求ID，仅用于溯源，非代取流水为空',
+    payer_id BIGINT NOT NULL COMMENT '付款方，代取发布方',
+    receiver_id BIGINT NULL COMMENT '收款方，代取接单方，结算前可为空',
+    business_type VARCHAR(40) NOT NULL DEFAULT 'PICKUP_REQUEST' COMMENT '当前仅PICKUP_REQUEST，仅用于支付追踪',
+    business_trace_no VARCHAR(80) NOT NULL COMMENT '业务追踪号，用于幂等、回调定位和异常排查',
+    amount DECIMAL(10,2) NOT NULL COMMENT '支付金额，单位元',
+    out_trade_no VARCHAR(64) NOT NULL COMMENT '商户订单号，必须唯一',
+    trade_no VARCHAR(128) NULL COMMENT '第三方交易号',
+    status VARCHAR(30) NOT NULL DEFAULT 'WAITING_PAY' COMMENT 'WAITING_PAY/PAID/CLOSED/REFUNDED/SETTLED',
+    pay_entry TEXT NULL COMMENT '支付宝沙箱支付入口',
+    expire_at DATETIME NOT NULL COMMENT '支付过期时间',
+    paid_at DATETIME NULL COMMENT '支付成功时间',
+    refunded_at DATETIME NULL COMMENT '退款成功时间',
+    settled_at DATETIME NULL COMMENT '结算成功时间',
+    closed_at DATETIME NULL COMMENT '待支付关闭时间',
+    close_reason VARCHAR(100) NULL COMMENT '关闭原因',
+    failure_reason VARCHAR(500) NULL COMMENT '失败原因',
+    status_changed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '最近状态变化时间',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT fk_point_transactions_user FOREIGN KEY (user_id) REFERENCES users(id),
-    CONSTRAINT chk_point_transactions_type CHECK (type IN ('EARN_VERIFICATION','EARN_CHECK_IN','SPEND_PUBLISH','REFUND_CANCEL','INCOME_COMPLETE')),
-    INDEX idx_point_tx_user_created (user_id, created_at),
-    INDEX idx_point_tx_user_type_created (user_id, type, created_at),
-    INDEX idx_point_tx_related_pickup (related_pickup_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='积分流水表';
+    CONSTRAINT uk_payment_records_out_trade_no UNIQUE (out_trade_no),
+    CONSTRAINT uk_payment_records_business_trace_no UNIQUE (business_trace_no),
+    CONSTRAINT fk_payment_records_payer FOREIGN KEY (payer_id) REFERENCES users(id),
+    CONSTRAINT fk_payment_records_receiver FOREIGN KEY (receiver_id) REFERENCES users(id),
+    CONSTRAINT chk_payment_records_business_type CHECK (business_type IN ('PICKUP_REQUEST')),
+    CONSTRAINT chk_payment_records_status CHECK (status IN ('WAITING_PAY','PAID','CLOSED','REFUNDED','SETTLED')),
+    INDEX idx_payment_records_payer_created (payer_id, created_at),
+    INDEX idx_payment_records_receiver_created (receiver_id, created_at),
+    INDEX idx_payment_records_status_expire (status, expire_at),
+    INDEX idx_payment_records_trade_no (trade_no)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='支付记录表';
 
 -- ---------------------------------------------------------------------
 -- 5. pickup_requests 代取请求主表
@@ -136,8 +142,9 @@ CREATE TABLE pickup_requests (
     reward_amount DECIMAL(10,2) NULL COMMENT '有报酬金额，1-200元；无报酬为空',
     pickup_credential_file_id BIGINT NOT NULL COMMENT '取件凭证文件ID',
     completion_proof_file_id BIGINT NULL COMMENT '完成凭证文件ID',
-    status VARCHAR(30) NOT NULL COMMENT 'WAITING_ACCEPT/IN_PROGRESS/COMPLETED/CANCELLED',
-    cancel_reason VARCHAR(40) NULL COMMENT 'USER_CANCELLED/ACCEPT_DEADLINE_EXPIRED/SYSTEM_CANCELLED',
+    payment_id BIGINT NULL COMMENT '支付记录ID；无报酬为空',
+    status VARCHAR(30) NOT NULL COMMENT 'WAITING_PAYMENT/WAITING_ACCEPT/IN_PROGRESS/COMPLETED/CANCELLED',
+    cancel_reason VARCHAR(40) NULL COMMENT 'USER_CANCELLED/PAYMENT_EXPIRED/ACCEPT_DEADLINE_EXPIRED/SYSTEM_CANCELLED',
     cancel_detail VARCHAR(500) NULL COMMENT '取消补充说明',
     accept_deadline DATETIME NOT NULL COMMENT '接单截止时间',
     accepted_at DATETIME NULL COMMENT '接单时间',
@@ -149,9 +156,11 @@ CREATE TABLE pickup_requests (
     CONSTRAINT fk_pickup_requests_acceptor FOREIGN KEY (acceptor_id) REFERENCES users(id),
     CONSTRAINT fk_pickup_requests_pickup_file FOREIGN KEY (pickup_credential_file_id) REFERENCES stored_files(id),
     CONSTRAINT fk_pickup_requests_completion_file FOREIGN KEY (completion_proof_file_id) REFERENCES stored_files(id),
+    CONSTRAINT fk_pickup_requests_payment FOREIGN KEY (payment_id) REFERENCES payment_records(id),
+    CONSTRAINT uk_pickup_requests_payment_id UNIQUE (payment_id),
     CONSTRAINT chk_pickup_requests_reward_type CHECK (reward_type IN ('PAID','UNPAID')),
-    CONSTRAINT chk_pickup_requests_status CHECK (status IN ('WAITING_ACCEPT','IN_PROGRESS','COMPLETED','CANCELLED')),
-    CONSTRAINT chk_pickup_requests_cancel_reason CHECK (cancel_reason IS NULL OR cancel_reason IN ('USER_CANCELLED','ACCEPT_DEADLINE_EXPIRED','SYSTEM_CANCELLED')),
+    CONSTRAINT chk_pickup_requests_status CHECK (status IN ('WAITING_PAYMENT','WAITING_ACCEPT','IN_PROGRESS','COMPLETED','CANCELLED')),
+    CONSTRAINT chk_pickup_requests_cancel_reason CHECK (cancel_reason IS NULL OR cancel_reason IN ('USER_CANCELLED','PAYMENT_EXPIRED','ACCEPT_DEADLINE_EXPIRED','SYSTEM_CANCELLED')),
     CONSTRAINT chk_pickup_requests_reward_amount CHECK ((reward_type = 'PAID' AND reward_amount BETWEEN 1.00 AND 200.00) OR (reward_type = 'UNPAID' AND reward_amount IS NULL)),
     CONSTRAINT chk_pickup_requests_not_self_accept CHECK (acceptor_id IS NULL OR acceptor_id <> publisher_id),
     INDEX idx_pickup_hall (status, campus, reward_type, created_at),
