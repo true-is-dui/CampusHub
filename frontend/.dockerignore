@@ -12,8 +12,8 @@
 !public/**
 
 !dist-nginx.conf
+!Dockerfile-prod
+!Dockerfile-test
 
-node_modules
-dist
-.git
-.DS_Store
+!dist/
+!dist/**
