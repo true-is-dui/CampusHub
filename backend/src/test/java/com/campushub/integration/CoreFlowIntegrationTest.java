@@ -8,7 +8,6 @@ import com.campushub.dto.pickup.PickupCreateResult;
 import com.campushub.dto.user.LoginSession;
 import com.campushub.dto.user.UserMeResponse;
 import com.campushub.entity.enums.AuthStatus;
-import com.campushub.entity.enums.PaymentStatus;
 import com.campushub.entity.enums.PickupStatus;
 import com.campushub.entity.enums.UserRole;
 import com.campushub.security.JwtUtil;
@@ -68,6 +67,8 @@ class CoreFlowIntegrationTest {
     private com.campushub.service.NotificationService notificationService;
     @MockitoBean
     private com.campushub.service.EvaluationService evaluationService;
+    @MockitoBean
+    private com.campushub.service.PointService pointService;
 
     @Test
     void normalFlow_registerLoginPublishAcceptUploadProofAndComplete() throws Exception {
@@ -93,7 +94,6 @@ class CoreFlowIntegrationTest {
                 .build());
         when(pickupService.confirmComplete(101L, 7L)).thenReturn(CompletionConfirmResult.builder()
                 .status(PickupStatus.COMPLETED)
-                .paymentStatus(PaymentStatus.SETTLED)
                 .completedAt(LocalDateTime.now())
                 .build());
 
@@ -146,8 +146,7 @@ class CoreFlowIntegrationTest {
         mockMvc.perform(post("/pickup-requests/101/completion-confirmation")
                         .header("Authorization", "Bearer " + publisherToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
-                .andExpect(jsonPath("$.data.paymentStatus").value("SETTLED"));
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"));
     }
 
     @Test

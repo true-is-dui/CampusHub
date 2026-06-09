@@ -1,6 +1,5 @@
 package com.campushub.dto.pickup;
 
-import com.campushub.entity.enums.PaymentStatus;
 import com.campushub.entity.enums.PickupStatus;
 import lombok.Builder;
 import lombok.Getter;
@@ -9,17 +8,15 @@ import java.time.LocalDateTime;
 
 /**
  * 完成确认响应，对应 {@code api_design.yaml}
- * {@code /pickup-requests/{id}/completion-confirmation} 的 data。
+ * {@code /pickup-requests/{id}/completion-confirmation} 的 data（{@code status} + {@code completedAt}）。
  *
- * <p>status 固定流转为 COMPLETED；有报酬服务 paymentStatus 为 SETTLED（本批结算留桩，
- * 仅标记支付记录状态，无真实资金），无报酬服务 paymentStatus 为空。
+ * <p>status 固定流转为 COMPLETED；有报酬服务在确认完成时把发布时扣减的报酬积分转入接单方账户，
+ * 积分变动经 PointService（无报酬服务不涉及积分）。
  */
 @Getter
 @Builder
 public class CompletionConfirmResult {
 
     private final PickupStatus status;
-    /** 有报酬服务结算后的支付状态（SETTLED）；无报酬服务为空。 */
-    private final PaymentStatus paymentStatus;
     private final LocalDateTime completedAt;
 }

@@ -18,18 +18,19 @@ import org.springframework.web.multipart.MultipartFile;
 
 /**
  * 代取服务，对应 {@code class_design.md} 的 {@code PickupService}：负责身份、权限、状态校验，
- * 以及与支付 / 文件 / 通知模块的协作。代取业务状态以 {@code PickupRequest.status} 为准，
+ * 以及与积分 / 文件 / 通知模块的协作。代取业务状态以 {@code PickupRequest.status} 为准，
  * 各方法内部按 {@code PickupStatus} 做前置校验。
  *
  * <p>方法签名显式收 {@code currentUserId}（由 {@code @CurrentUser} 注入），不信任前端传入身份。
- * 第五批落地发布 / 浏览 / 接单 / 完成 / 取消的完整流转；有报酬服务的真实支付（支付成功回调推进、
- * 超时定时取消）留第六批。
+ * 有报酬服务的报酬以平台积分计价：发布即扣减发布方积分、完成转入接单方、待接单阶段取消退回，
+ * 积分变动经 {@code PointService}（同一事务内完成）。
  */
 public interface PickupService {
 
     /**
      * 发布代取服务（取件凭证图片随表单上传）。需实名认证通过。
-     * 无报酬 → WAITING_ACCEPT；有报酬 → WAITING_PAYMENT（建预付款，返回 payEntry/expireAt）。
+     * 无报酬与有报酬服务发布成功后均直接进入 WAITING_ACCEPT；有报酬服务发布时从发布方账户
+     * 扣减报酬积分，余额不足则发布失败（409 INSUFFICIENT_POINTS）。
      */
     PickupCreateResult publishPickup(Long currentUserId, PickupCreateRequest request,
                                      MultipartFile pickupCredential);
@@ -57,13 +58,13 @@ public interface PickupService {
 
     /**
      * 发布方确认完成：服务须为 IN_PROGRESS 且已上传完成凭证。
-     * 流转为 COMPLETED；有报酬服务触发结算（本批占位）。
+     * 流转为 COMPLETED；有报酬服务把发布时扣减的报酬积分转入接单方账户。
      */
     CompletionConfirmResult confirmComplete(Long pickupId, Long currentUserId);
 
     /**
-     * 发布方取消：WAITING_PAYMENT（关闭待支付记录）或 WAITING_ACCEPT（无报酬直接取消，
-     * 有报酬且已预付款触发退款）。IN_PROGRESS / COMPLETED / CANCELLED 不可取消。
+     * 发布方取消：仅 WAITING_ACCEPT 可取消。无报酬直接取消；有报酬把发布时扣减的积分退回发布方。
+     * IN_PROGRESS / COMPLETED / CANCELLED 不可取消。
      */
     PickupCancelResult cancelPickup(Long pickupId, Long currentUserId, String cancelDetail);
 

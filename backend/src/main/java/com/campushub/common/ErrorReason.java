@@ -61,7 +61,13 @@ public enum ErrorReason {
      * 当前不满足评价条件：服务未完成、已评价过，或当前状态不允许评价。
      * 契约 {@code POST /pickup-requests/{pickupId}/evaluations} 的 409 统一归此 reason。
      */
-    PICKUP_EVALUATION_NOT_ALLOWED("当前不满足评价条件");
+    PICKUP_EVALUATION_NOT_ALLOWED("当前不满足评价条件"),
+
+    /** 发布有报酬代取时积分余额不足以支付报酬。契约 {@code POST /pickup-requests} 的 409。 */
+    INSUFFICIENT_POINTS("积分余额不足"),
+
+    /** 当日已签到，不能重复领取签到积分。契约 {@code POST /users/me/check-in} 的 409。 */
+    ALREADY_CHECKED_IN_TODAY("今日已签到，请明天再来");
 
     /** 缺省中文提示语；调用方可用更具体的 message 覆盖。 */
     private final String defaultMessage;

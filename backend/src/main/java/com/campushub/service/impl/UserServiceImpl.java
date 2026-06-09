@@ -59,6 +59,7 @@ public class UserServiceImpl implements UserService {
                 .contact(user.getContact())
                 .authStatus(user.getAuthStatus())
                 .role(user.getRole())
+                .pointBalance(user.getPointBalance() == null ? 0L : user.getPointBalance())
                 .build();
     }
 

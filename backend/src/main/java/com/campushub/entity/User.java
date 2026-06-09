@@ -9,6 +9,7 @@ import com.campushub.entity.enums.AuthStatus;
 import com.campushub.entity.enums.UserRole;
 import lombok.Data;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -64,6 +65,12 @@ public class User {
     /** 用户角色 */
     private UserRole role;
 
+    /** 平台积分余额，纯虚拟、不可充值提现；认证赠送、签到、代取流转时由 PointService 维护 */
+    private Long pointBalance;
+
+    /** 最近一次签到日期，用于每日签到去重 */
+    private LocalDate lastCheckInDate;
+
     /** 注册时间，插入时自动填充 */
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
@@ -114,5 +121,34 @@ public class User {
     /** 是否为管理员 */
     public boolean isAdmin() {
         return this.role == UserRole.ADMIN;
+    }
+
+    /**
+     * 从积分余额中扣减，返回扣减后的余额。余额不足由 Service 层在调用前拦截
+     * （本方法仍做一次防御性校验，不允许扣成负数）。供发布有报酬代取使用。
+     */
+    public long deductPoints(long amount) {
+        long current = currentBalance();
+        if (amount < 0 || current < amount) {
+            throw new IllegalStateException("积分余额不足");
+        }
+        this.pointBalance = current - amount;
+        return this.pointBalance;
+    }
+
+    /**
+     * 向积分余额中增加，返回增加后的余额。供签到、认证赠送、取消退回、完成入账使用。
+     */
+    public long addPoints(long amount) {
+        if (amount < 0) {
+            throw new IllegalStateException("增加积分不能为负");
+        }
+        this.pointBalance = currentBalance() + amount;
+        return this.pointBalance;
+    }
+
+    /** 余额初值兜底：历史数据或未初始化时按 0 处理（数据库列有 NOT NULL DEFAULT 0）。 */
+    private long currentBalance() {
+        return this.pointBalance == null ? 0L : this.pointBalance;
     }
 }

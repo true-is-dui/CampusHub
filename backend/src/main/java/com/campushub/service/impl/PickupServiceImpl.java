@@ -22,18 +22,16 @@ import com.campushub.entity.enums.BusinessType;
 import com.campushub.entity.enums.FileBusinessType;
 import com.campushub.entity.enums.FileUsage;
 import com.campushub.entity.enums.NotificationType;
-import com.campushub.entity.enums.PaymentStatus;
 import com.campushub.entity.enums.PickupCancelReason;
 import com.campushub.entity.enums.PickupStatus;
 import com.campushub.entity.enums.RewardType;
 import com.campushub.mapper.PickupRequestMapper;
 import com.campushub.service.FileStorageService;
 import com.campushub.service.NotificationService;
-import com.campushub.service.PaymentService;
+import com.campushub.service.PointService;
 import com.campushub.service.PickupService;
 import com.campushub.service.UserService;
 import com.campushub.service.dto.PickupEvaluationContext;
-import com.campushub.service.dto.PrepayResult;
 import com.campushub.service.dto.StoredFileContent;
 import com.campushub.service.dto.UserBrief;
 import lombok.RequiredArgsConstructor;
@@ -45,8 +43,6 @@ import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -57,8 +53,9 @@ import java.util.stream.Collectors;
  * 状态条件更新，不引乐观锁 version 列）。
  *
  * <p>跨模块协作：认证门槛与用户摘要经 {@link UserService}（owner service），凭证文件经
- * {@link FileStorageService}（只回 fileId、受信读取），有报酬支付经 {@link PaymentService}
- * 接口。关键状态变更（接单/上传凭证/确认完成/取消）后经 {@link NotificationService} 通知对手方。
+ * {@link FileStorageService}（只回 fileId、受信读取），有报酬服务的积分扣减/退回/转入经
+ * {@link PointService} 接口。关键状态变更（接单/上传凭证/确认完成/取消）后经
+ * {@link NotificationService} 通知对手方。
  */
 @Service
 @RequiredArgsConstructor
@@ -66,13 +63,11 @@ public class PickupServiceImpl implements PickupService {
 
     /** 物品说明预览长度上限，超出截断（列表项用）。 */
     private static final int DESC_PREVIEW_LEN = 100;
-    /** 有报酬待支付截止时间：预付款创建后 3 分钟（MVP 固定）。 */
-    private static final long PAYMENT_EXPIRE_MINUTES = 3;
 
     private final PickupRequestMapper pickupRequestMapper;
     private final UserService userService;
     private final FileStorageService fileStorageService;
-    private final PaymentService paymentService;
+    private final PointService pointService;
     private final NotificationService notificationService;
 
     // ---------------- 发布 ----------------
@@ -99,30 +94,19 @@ public class PickupServiceImpl implements PickupService {
         pickup.setPickupCredentialFileId(credentialFileId);
         pickup.setAcceptDeadline(request.getAcceptDeadline());
 
-        if (request.getRewardType() == RewardType.PAID) {
-            LocalDateTime expireAt = LocalDateTime.now().plusMinutes(PAYMENT_EXPIRE_MINUTES);
-            String traceNo = "PICKUP-" + UUID.randomUUID().toString().replace("-", "");
-            PrepayResult prepay = paymentService.createPrepay(
-                    currentUserId, request.getRewardAmount(), expireAt,
-                    BusinessType.PICKUP_REQUEST, traceNo);
-            pickup.markWaitingPayment(prepay.getPaymentId());
-            pickupRequestMapper.insert(pickup);
-            // 回填取件凭证文件溯源到代取请求 ID。
-            fileStorageService.updateBusinessTrace(credentialFileId,
-                    FileBusinessType.PICKUP_REQUEST, pickup.getId());
-            return PickupCreateResult.builder()
-                    .pickupId(pickup.getId())
-                    .status(pickup.getStatus())
-                    .payEntry(prepay.getPayEntry())
-                    .expireAt(prepay.getExpireAt())
-                    .build();
-        }
-
-        // 无报酬：直接待接单。
+        // 有报酬与无报酬发布成功后均直接进入待接单；有报酬先落库拿到 pickupId 再扣积分
+        // （积分流水需 relatedPickupId 溯源），扣减失败（余额不足）抛 409、事务整体回滚。
         pickup.markWaitingAccept();
         pickupRequestMapper.insert(pickup);
+        // 回填取件凭证文件溯源到代取请求 ID。
         fileStorageService.updateBusinessTrace(credentialFileId,
                 FileBusinessType.PICKUP_REQUEST, pickup.getId());
+
+        if (request.getRewardType() == RewardType.PAID) {
+            pointService.spendForPublish(currentUserId,
+                    toPoints(request.getRewardAmount()), pickup.getId());
+        }
+
         return PickupCreateResult.builder()
                 .pickupId(pickup.getId())
                 .status(pickup.getStatus())
@@ -278,17 +262,16 @@ public class PickupServiceImpl implements PickupService {
         pickup.markCompleted();
         requireAffected(updateOnStatus(pickup, PickupStatus.IN_PROGRESS));
 
-        PaymentStatus paymentStatus = null;
-        if (pickup.isPaid() && pickup.getPaymentId() != null) {
-            paymentService.settlePayment(pickup.getPaymentId(), pickup.getAcceptorId());
-            paymentStatus = PaymentStatus.SETTLED;
+        // 有报酬服务：把发布时扣减的报酬积分转入接单方账户（发布方扣减已在发布时记账）。
+        if (pickup.isPaid()) {
+            pointService.transferOnComplete(pickup.getPublisherId(), pickup.getAcceptorId(),
+                    toPoints(pickup.getRewardAmount()), pickup.getId());
         }
         notificationService.createNotice(pickup.getAcceptorId(), NotificationType.PICKUP,
                 "代取服务已确认完成", "发布方已确认完成本次代取服务，感谢您的帮助。",
                 BusinessType.PICKUP_REQUEST.name(), pickup.getId());
         return CompletionConfirmResult.builder()
                 .status(pickup.getStatus())
-                .paymentStatus(paymentStatus)
                 .completedAt(pickup.getCompletedAt())
                 .build();
     }
@@ -304,35 +287,21 @@ public class PickupServiceImpl implements PickupService {
         }
 
         PickupStatus from = pickup.getStatus();
-        PaymentStatus paymentStatus = null;
-        if (from == PickupStatus.WAITING_PAYMENT) {
-            // 关闭未支付记录。
-            if (pickup.getPaymentId() != null) {
-                paymentService.cancelWaitingPayment(pickup.getPaymentId(), "发布方取消待支付服务");
-                paymentStatus = PaymentStatus.CLOSED;
-            }
-        } else if (from == PickupStatus.WAITING_ACCEPT) {
-            // 有报酬已预付款 → 退款；无报酬无需处理资金。
-            if (pickup.isPaid() && pickup.getPaymentId() != null) {
-                paymentService.refundPayment(pickup.getPaymentId());
-                paymentStatus = PaymentStatus.REFUNDED;
-            }
-        } else {
-            // IN_PROGRESS / COMPLETED / CANCELLED 不可取消。
+        // 仅 WAITING_ACCEPT 可由发布方主动取消；IN_PROGRESS / COMPLETED / CANCELLED 不可取消。
+        if (from != PickupStatus.WAITING_ACCEPT) {
             throw new BusinessException(ErrorCode.CONFLICT, ErrorReason.PICKUP_STATUS_NOT_ALLOWED);
         }
 
         pickup.markCancelled(PickupCancelReason.USER_CANCELLED, cancelDetail);
         requireAffected(updateOnStatus(pickup, from));
-        // 仅在已有接单方时通知对手方；WAITING_PAYMENT 阶段尚无接单方，无需通知。
-        if (pickup.getAcceptorId() != null) {
-            notificationService.createNotice(pickup.getAcceptorId(), NotificationType.PICKUP,
-                    "代取服务已被取消", "您接单的代取服务已被发布方取消。",
-                    BusinessType.PICKUP_REQUEST.name(), pickup.getId());
+
+        // 有报酬服务：把发布时扣减的报酬积分退回发布方账户（无报酬无需处理积分）。
+        if (pickup.isPaid()) {
+            pointService.refundForCancel(pickup.getPublisherId(),
+                    toPoints(pickup.getRewardAmount()), pickup.getId());
         }
         return PickupCancelResult.builder()
                 .status(pickup.getStatus())
-                .paymentStatus(paymentStatus)
                 .cancelReason(pickup.getCancelReason())
                 .build();
     }
@@ -446,5 +415,14 @@ public class PickupServiceImpl implements PickupService {
             return null;
         }
         return desc.length() <= DESC_PREVIEW_LEN ? desc : desc.substring(0, DESC_PREVIEW_LEN);
+    }
+
+    /**
+     * 报酬金额（DECIMAL，1-200 整数元）→ 积分量（long）。
+     * 金额由 DTO 校验保证为 1-200 且发布时为整数元；{@code longValueExact} 对含非零小数的值抛异常，
+     * 作为防御性兜底（库表 CHECK 也限定 PAID 金额范围）。
+     */
+    private long toPoints(java.math.BigDecimal rewardAmount) {
+        return rewardAmount.longValueExact();
     }
 }

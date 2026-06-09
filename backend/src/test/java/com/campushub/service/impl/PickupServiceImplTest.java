@@ -6,7 +6,6 @@ import com.campushub.dto.pickup.PickupAcceptResult;
 import com.campushub.dto.pickup.PickupCreateRequest;
 import com.campushub.dto.pickup.PickupCreateResult;
 import com.campushub.entity.PickupRequest;
-import com.campushub.entity.enums.BusinessType;
 import com.campushub.entity.enums.FileUsage;
 import com.campushub.entity.enums.NotificationType;
 import com.campushub.entity.enums.PickupCancelReason;
@@ -15,9 +14,8 @@ import com.campushub.entity.enums.RewardType;
 import com.campushub.mapper.PickupRequestMapper;
 import com.campushub.service.FileStorageService;
 import com.campushub.service.NotificationService;
-import com.campushub.service.PaymentService;
+import com.campushub.service.PointService;
 import com.campushub.service.UserService;
-import com.campushub.service.dto.PrepayResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -35,13 +33,14 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
  * {@link PickupServiceImpl} 单元测试：mock mapper / UserService / FileStorageService /
- * PaymentService，验证状态流转、鉴权与支付占位分支，不连数据库。
+ * PointService，验证状态流转、鉴权与有报酬积分扣减/退回/转入分支，不连数据库。
  */
 @ExtendWith(MockitoExtension.class)
 class PickupServiceImplTest {
@@ -53,7 +52,7 @@ class PickupServiceImplTest {
     @Mock
     private FileStorageService fileStorageService;
     @Mock
-    private PaymentService paymentService;
+    private PointService pointService;
 
     @Mock
     private NotificationService notificationService;
@@ -77,7 +76,7 @@ class PickupServiceImplTest {
     }
 
     @Test
-    void publish_unpaid_goesWaitingAccept_noPayment() {
+    void publish_unpaid_goesWaitingAccept_noPointSpend() {
         when(fileStorageService.uploadImage(any(), eq(1L), eq(FileUsage.PICKUP_CREDENTIAL), any(), any()))
                 .thenReturn(99L);
 
@@ -85,27 +84,35 @@ class PickupServiceImplTest {
                 pickupService.publishPickup(1L, createRequest(RewardType.UNPAID, null), image);
 
         assertThat(result.getStatus()).isEqualTo(PickupStatus.WAITING_ACCEPT);
-        assertThat(result.getPayEntry()).isNull();
         verify(userService).ensureCertified(1L);
-        verify(paymentService, never()).createPrepay(any(), any(), any(), any(), any());
+        verify(pointService, never()).spendForPublish(anyLong(), anyLong(), any());
         verify(pickupRequestMapper).insert(any(PickupRequest.class));
     }
 
     @Test
-    void publish_paid_goesWaitingPayment_withPrepay() {
+    void publish_paid_goesWaitingAccept_spendsPoints() {
         when(fileStorageService.uploadImage(any(), anyLong(), any(), any(), any())).thenReturn(99L);
-        when(paymentService.createPrepay(eq(1L), eq(new BigDecimal("10")), any(),
-                eq(BusinessType.PICKUP_REQUEST), any()))
-                .thenReturn(PrepayResult.builder()
-                        .paymentId(500L).payEntry("https://pay").expireAt(LocalDateTime.now().plusMinutes(3))
-                        .build());
 
         PickupCreateResult result =
                 pickupService.publishPickup(1L, createRequest(RewardType.PAID, new BigDecimal("10")), image);
 
-        assertThat(result.getStatus()).isEqualTo(PickupStatus.WAITING_PAYMENT);
-        assertThat(result.getPayEntry()).isEqualTo("https://pay");
-        assertThat(result.getExpireAt()).isNotNull();
+        assertThat(result.getStatus()).isEqualTo(PickupStatus.WAITING_ACCEPT);
+        // 有报酬发布直接进入待接单，并扣减发布方 10 积分（金额→积分）。
+        verify(pointService).spendForPublish(eq(1L), eq(10L), any());
+    }
+
+    @Test
+    void publish_paid_insufficientPoints_propagates409() {
+        when(fileStorageService.uploadImage(any(), anyLong(), any(), any(), any())).thenReturn(99L);
+        doThrow(new BusinessException(ErrorCode.CONFLICT,
+                com.campushub.common.ErrorReason.INSUFFICIENT_POINTS))
+                .when(pointService).spendForPublish(anyLong(), anyLong(), any());
+
+        assertThatThrownBy(() ->
+                pickupService.publishPickup(1L, createRequest(RewardType.PAID, new BigDecimal("10")), image))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.CONFLICT);
     }
 
     @Test
@@ -163,12 +170,12 @@ class PickupServiceImplTest {
     }
 
     @Test
-    void confirmComplete_paid_settles() {
+    void confirmComplete_paid_transfersPointsToAcceptor() {
         PickupRequest p = waitingAccept(10L, 1L);
         p.setStatus(PickupStatus.IN_PROGRESS);
         p.setAcceptorId(2L);
         p.setRewardType(RewardType.PAID);
-        p.setPaymentId(500L);
+        p.setRewardAmount(new BigDecimal("10"));
         p.setCompletionProofFileId(77L);
         when(pickupRequestMapper.selectById(10L)).thenReturn(p);
         when(pickupRequestMapper.update(any(), any())).thenReturn(1);
@@ -176,7 +183,8 @@ class PickupServiceImplTest {
         var result = pickupService.confirmComplete(10L, 1L);
 
         assertThat(result.getStatus()).isEqualTo(PickupStatus.COMPLETED);
-        verify(paymentService).settlePayment(500L, 2L);
+        // 完成把报酬积分转入接单方（发布方 1L、接单方 2L、10 积分）。
+        verify(pointService).transferOnComplete(eq(1L), eq(2L), eq(10L), eq(10L));
     }
 
     @Test
@@ -192,18 +200,31 @@ class PickupServiceImplTest {
     }
 
     @Test
-    void cancel_waitingPayment_closesPayment() {
+    void cancel_waitingAccept_paid_refundsPoints() {
         PickupRequest p = waitingAccept(10L, 1L);
-        p.setStatus(PickupStatus.WAITING_PAYMENT);
+        p.setStatus(PickupStatus.WAITING_ACCEPT);
         p.setRewardType(RewardType.PAID);
-        p.setPaymentId(500L);
+        p.setRewardAmount(new BigDecimal("10"));
         when(pickupRequestMapper.selectById(10L)).thenReturn(p);
         when(pickupRequestMapper.update(any(), any())).thenReturn(1);
 
         var result = pickupService.cancelPickup(10L, 1L, "改主意了");
 
         assertThat(result.getStatus()).isEqualTo(PickupStatus.CANCELLED);
-        verify(paymentService).cancelWaitingPayment(eq(500L), any());
+        // 待接单阶段取消有报酬服务，退回发布方 10 积分。
+        verify(pointService).refundForCancel(eq(1L), eq(10L), eq(10L));
+    }
+
+    @Test
+    void cancel_waitingAccept_unpaid_noPointOps() {
+        PickupRequest p = waitingAccept(10L, 1L);
+        when(pickupRequestMapper.selectById(10L)).thenReturn(p);
+        when(pickupRequestMapper.update(any(), any())).thenReturn(1);
+
+        var result = pickupService.cancelPickup(10L, 1L, null);
+
+        assertThat(result.getStatus()).isEqualTo(PickupStatus.CANCELLED);
+        verify(pointService, never()).refundForCancel(anyLong(), anyLong(), any());
     }
 
     @Test

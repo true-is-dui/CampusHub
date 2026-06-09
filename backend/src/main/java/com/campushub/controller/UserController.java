@@ -9,6 +9,9 @@ import com.campushub.dto.notification.UnreadCountResponse;
 import com.campushub.dto.evaluation.EvaluationHistorySummary;
 import com.campushub.dto.evaluation.RatingSummary;
 import com.campushub.dto.pickup.PickupSummary;
+import com.campushub.dto.point.CheckInResult;
+import com.campushub.dto.point.PointBalanceResponse;
+import com.campushub.dto.point.PointTransactionItem;
 import com.campushub.dto.user.UpdateProfileRequest;
 import com.campushub.dto.user.UserMeResponse;
 import com.campushub.dto.user.UserPublicProfile;
@@ -16,11 +19,13 @@ import com.campushub.dto.user.VerificationSubmitRequest;
 import com.campushub.dto.user.VerificationSubmitResponse;
 import com.campushub.entity.enums.PickupParticipantRole;
 import com.campushub.entity.enums.PickupStatus;
+import com.campushub.entity.enums.PointTransactionType;
 import com.campushub.security.CurrentUser;
 import com.campushub.service.PickupService;
 import com.campushub.service.dto.StoredFileContent;
 import com.campushub.service.EvaluationService;
 import com.campushub.service.NotificationService;
+import com.campushub.service.PointService;
 import com.campushub.service.UserService;
 import com.campushub.service.VerificationReviewService;
 import jakarta.validation.Valid;
@@ -60,6 +65,7 @@ public class UserController {
     private final PickupService pickupService;
     private final NotificationService notificationService;
     private final EvaluationService evaluationService;
+    private final PointService pointService;
 
 
     /** 获取当前登录用户的完整资料（读库返回最新值）。 */
@@ -131,6 +137,31 @@ public class UserController {
                                                   @PathVariable Long notificationId) {
         notificationService.markRead(notificationId, me.getCurrentUserId());
         return ApiResponse.ok();
+    }
+
+    /** 查询当前用户的平台积分余额。委托 {@link PointService}。 */
+    @GetMapping("/me/point-balance")
+    public ApiResponse<PointBalanceResponse> pointBalance(@CurrentUser CurrentUserContext me) {
+        long balance = pointService.getBalance(me.getCurrentUserId());
+        return ApiResponse.ok(new PointBalanceResponse(balance));
+    }
+
+    /** 每日签到领取积分（每日一次，重复签到返回 409）。委托 {@link PointService}。 */
+    @PostMapping("/me/check-in")
+    public ApiResponse<CheckInResult> checkIn(@CurrentUser CurrentUserContext me) {
+        return ApiResponse.ok(pointService.checkIn(me.getCurrentUserId()));
+    }
+
+    /**
+     * 查询当前用户的积分流水（分页，按创建时间倒序，可按 {@code type} 筛选）。
+     * 委托 {@link PointService}。
+     */
+    @GetMapping("/me/point-transactions")
+    public ApiResponse<PageResult<PointTransactionItem>> pointTransactions(
+            @CurrentUser CurrentUserContext me,
+            @RequestParam(required = false) PointTransactionType type,
+            @Valid PageQuery pageQuery) {
+        return ApiResponse.ok(pointService.queryTransactions(me.getCurrentUserId(), type, pageQuery));
     }
 
     /** 公开读取用户头像。 */
