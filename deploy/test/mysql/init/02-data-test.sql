@@ -15,7 +15,8 @@
 -- 数据规模：
 --   用户：64 个
 --   实名认证审核：30 条
---   代取请求：171 条
+--   积分流水：50 条
+--   代取请求：159 条
 --   评价：70 条
 --   通知：约 200+ 条
 --
@@ -31,8 +32,8 @@
 SET FOREIGN_KEY_CHECKS = 0;
 TRUNCATE TABLE notifications;
 TRUNCATE TABLE evaluations;
+TRUNCATE TABLE point_transactions;
 TRUNCATE TABLE pickup_requests;
-TRUNCATE TABLE payment_records;
 TRUNCATE TABLE verification_reviews;
 TRUNCATE TABLE stored_files;
 TRUNCATE TABLE users;
@@ -61,23 +62,28 @@ SELECT n FROM seq;
 --      其他用户 -> User@123
 -- ---------------------------------------------------------------------
 INSERT INTO users
-  (id, username, password_hash, nickname, phone, student_id, real_name, college, contact, auth_status, role, created_at, updated_at)
+  (id, username, password_hash, nickname, phone, student_id, real_name, college, contact, auth_status, role,
+   point_balance, last_check_in_date, created_at, updated_at)
 VALUES
   (1, 'admin',
       '$2a$10$vdgwQmli09Y1TCL.Uy/bIORIg0Y3bvZqShvhH2gW3OvSYwGdvpNme',
-      '平台管理员', NULL, NULL, NULL, NULL, NULL, 'APPROVED', 'ADMIN', NOW(), NOW()),
+      '平台管理员', NULL, NULL, NULL, NULL, NULL, 'APPROVED', 'ADMIN', 0, NULL, NOW(), NOW()),
   (2, 'alice',
       '$2a$10$SVacMEcEnqkXU9RancgTVOBdBHc5yQPXvo3MVQgH1Jw4JxYN7l/gO',
-      '测试-Alice', '13800000002', '200000001', '测试用户Alice', '计算机学院', 'wx: alice_test', 'APPROVED', 'USER', NOW(), NOW()),
+      '测试-Alice', '13800000002', '200000001', '测试用户Alice', '计算机学院', 'wx: alice_test', 'APPROVED', 'USER',
+      100, NULL, NOW(), NOW()),
   (3, 'bob',
       '$2a$10$SVacMEcEnqkXU9RancgTVOBdBHc5yQPXvo3MVQgH1Jw4JxYN7l/gO',
-      '测试-Bob', '13800000003', '200000002', '测试用户Bob', '软件学院', 'wx: bob_test', 'APPROVED', 'USER', NOW(), NOW()),
+      '测试-Bob', '13800000003', '200000002', '测试用户Bob', '软件学院', 'wx: bob_test', 'APPROVED', 'USER',
+      100, NULL, NOW(), NOW()),
   (4, 'carol',
       '$2a$10$SVacMEcEnqkXU9RancgTVOBdBHc5yQPXvo3MVQgH1Jw4JxYN7l/gO',
-      '测试-Carol', '13800000004', NULL, NULL, '电子学院', NULL, 'REVIEWING', 'USER', NOW(), NOW());
+      '测试-Carol', '13800000004', NULL, NULL, '电子学院', NULL, 'REVIEWING', 'USER',
+      0, NULL, NOW(), NOW());
 
 INSERT INTO users
-  (id, username, password_hash, nickname, phone, student_id, real_name, college, contact, auth_status, role, created_at, updated_at)
+  (id, username, password_hash, nickname, phone, student_id, real_name, college, contact, auth_status, role,
+   point_balance, last_check_in_date, created_at, updated_at)
 SELECT
   10 + n AS id,
   CONCAT('demo_user_', LPAD(n, 2, '0')) AS username,
@@ -101,13 +107,39 @@ SELECT
     ELSE 'REJECTED'
   END AS auth_status,
   'USER' AS role,
+  CASE WHEN n BETWEEN 1 AND 48 THEN 100 ELSE 0 END AS point_balance,
+  NULL AS last_check_in_date,
   DATE_SUB(NOW(), INTERVAL n DAY) AS created_at,
   DATE_SUB(NOW(), INTERVAL MOD(n, 7) DAY) AS updated_at
 FROM seed_numbers
 WHERE n <= 60;
 
 -- ---------------------------------------------------------------------
--- 4. 实名认证审核临时数据
+-- 4. point_transactions 积分流水
+--    已认证普通用户各一条认证赠送流水，与 users.point_balance 保持一致。
+-- ---------------------------------------------------------------------
+INSERT INTO point_transactions
+  (id, user_id, type, amount, balance_after, related_pickup_id, created_at, updated_at)
+VALUES
+  (1, 2, 'EARN_VERIFICATION', 100, 100, NULL, DATE_SUB(NOW(), INTERVAL 5 DAY), DATE_SUB(NOW(), INTERVAL 5 DAY)),
+  (2, 3, 'EARN_VERIFICATION', 100, 100, NULL, DATE_SUB(NOW(), INTERVAL 5 DAY), DATE_SUB(NOW(), INTERVAL 5 DAY));
+
+INSERT INTO point_transactions
+  (id, user_id, type, amount, balance_after, related_pickup_id, created_at, updated_at)
+SELECT
+  100 + n AS id,
+  10 + n AS user_id,
+  'EARN_VERIFICATION' AS type,
+  100 AS amount,
+  100 AS balance_after,
+  NULL AS related_pickup_id,
+  DATE_SUB(NOW(), INTERVAL (n + 5) DAY) AS created_at,
+  DATE_SUB(NOW(), INTERVAL (n + 5) DAY) AS updated_at
+FROM seed_numbers
+WHERE n <= 48;
+
+-- ---------------------------------------------------------------------
+-- 5. 实名认证审核临时数据
 -- ---------------------------------------------------------------------
 DROP TEMPORARY TABLE IF EXISTS seed_reviews;
 CREATE TEMPORARY TABLE seed_reviews (
@@ -153,7 +185,7 @@ FROM seed_numbers
 WHERE n <= 29;
 
 -- ---------------------------------------------------------------------
--- 5. stored_files 文件元数据
+-- 6. stored_files 文件元数据
 -- ---------------------------------------------------------------------
 INSERT INTO stored_files
   (id, uploader_id, file_usage, original_filename, storage_path, mime_type, file_size, sha256, business_type, business_id, created_at, updated_at)
@@ -173,7 +205,7 @@ SELECT
 FROM seed_reviews;
 
 -- ---------------------------------------------------------------------
--- 6. verification_reviews 实名认证审核
+-- 7. verification_reviews 实名认证审核
 -- ---------------------------------------------------------------------
 INSERT INTO verification_reviews
   (id, user_id, material_file_id, submitted_student_id, submitted_real_name, status, reviewer_id, reject_reason, submitted_at, reviewed_at, created_at, updated_at)
@@ -183,7 +215,7 @@ SELECT
 FROM seed_reviews;
 
 -- ---------------------------------------------------------------------
--- 7. 构造代取请求临时数据
+-- 8. 构造代取请求临时数据
 -- ---------------------------------------------------------------------
 DROP TEMPORARY TABLE IF EXISTS seed_pickups;
 CREATE TEMPORARY TABLE seed_pickups (
@@ -310,7 +342,7 @@ SELECT
   CASE WHEN MOD(n, 4) IN (0, 2) THEN 'PAID' ELSE 'UNPAID' END AS reward_type,
   CASE WHEN MOD(n, 4) IN (0, 2) THEN CAST(5 + MOD(n, 20) AS DECIMAL(10,2)) ELSE NULL END AS reward_amount,
   'CANCELLED' AS status,
-  ELT(1 + MOD(n, 4), 'USER_CANCELLED', 'PAYMENT_EXPIRED', 'ACCEPT_DEADLINE_EXPIRED', 'SYSTEM_CANCELLED') AS cancel_reason,
+  ELT(1 + MOD(n, 3), 'USER_CANCELLED', 'ACCEPT_DEADLINE_EXPIRED', 'SYSTEM_CANCELLED') AS cancel_reason,
   CONCAT('测试取消说明 ', LPAD(n, 2, '0')) AS cancel_detail,
   DATE_SUB(NOW(), INTERVAL (n + 1) DAY) AS accept_deadline,
   NULL AS accepted_at,
@@ -320,33 +352,8 @@ SELECT
 FROM seed_numbers
 WHERE n <= 20;
 
--- id=160..171：12 条待支付，用于支付入口和待支付列表展示。
-INSERT INTO seed_pickups
-  (id, publisher_id, acceptor_id, campus, pickup_location, delivery_location, item_description,
-   reward_type, reward_amount, status, cancel_reason, cancel_detail, accept_deadline, accepted_at, completed_at, cancelled_at, created_at)
-SELECT
-  159 + n AS id,
-  10 + MOD(n, 48) + 1 AS publisher_id,
-  NULL AS acceptor_id,
-  ELT(1 + MOD(n, 4), 'XIANLIN', 'GULOU', 'PUKOU', 'SUZHOU') AS campus,
-  ELT(1 + MOD(n, 6), '菜鸟驿站', '京东快递点', '顺丰服务点', '丰巢柜', '中通快递', '校门口快递架') AS pickup_location,
-  CONCAT(ELT(1 + MOD(n, 5), '宿舍', '教学楼', '图书馆', '实验楼', '食堂'), 1 + MOD(n, 18), '号点') AS delivery_location,
-  CONCAT('待支付测试包裹 ', LPAD(n, 2, '0'), '，用于支付状态测试') AS item_description,
-  'PAID' AS reward_type,
-  CAST(10 + MOD(n, 30) AS DECIMAL(10,2)) AS reward_amount,
-  'WAITING_PAYMENT' AS status,
-  NULL AS cancel_reason,
-  NULL AS cancel_detail,
-  DATE_ADD(NOW(), INTERVAL (24 + n) HOUR) AS accept_deadline,
-  NULL AS accepted_at,
-  NULL AS completed_at,
-  NULL AS cancelled_at,
-  DATE_SUB(NOW(), INTERVAL n HOUR) AS created_at
-FROM seed_numbers
-WHERE n <= 12;
-
 -- ---------------------------------------------------------------------
--- 8. 代取相关文件：每条代取一条取件凭证，已完成代取一条完成凭证
+-- 9. 代取相关文件：每条代取一条取件凭证，已完成代取一条完成凭证
 -- ---------------------------------------------------------------------
 INSERT INTO stored_files
   (id, uploader_id, file_usage, original_filename, storage_path, mime_type, file_size, sha256, business_type, business_id, created_at, updated_at)
@@ -384,54 +391,16 @@ FROM seed_pickups
 WHERE status = 'COMPLETED';
 
 -- ---------------------------------------------------------------------
--- 9. payment_records 支付记录
--- ---------------------------------------------------------------------
-INSERT INTO payment_records
-  (id, payer_id, receiver_id, business_type, business_trace_no, amount, out_trade_no, trade_no, status,
-   pay_entry, expire_at, paid_at, refunded_at, settled_at, closed_at, close_reason, failure_reason,
-   status_changed_at, created_at, updated_at)
-SELECT
-  3000 + id AS id,
-  publisher_id AS payer_id,
-  CASE WHEN status IN ('IN_PROGRESS', 'COMPLETED') THEN acceptor_id ELSE NULL END AS receiver_id,
-  'PICKUP_REQUEST' AS business_type,
-  CONCAT('PICKUP-SEED-', LPAD(id, 6, '0')) AS business_trace_no,
-  reward_amount AS amount,
-  CONCAT('SEED', LPAD(id, 12, '0')) AS out_trade_no,
-  CASE WHEN status IN ('WAITING_PAYMENT') THEN NULL ELSE CONCAT('SANDBOX', LPAD(id, 12, '0')) END AS trade_no,
-  CASE
-    WHEN status = 'WAITING_PAYMENT' THEN 'WAITING_PAY'
-    WHEN status = 'COMPLETED' THEN 'SETTLED'
-    WHEN status = 'CANCELLED' AND cancel_reason = 'PAYMENT_EXPIRED' THEN 'CLOSED'
-    WHEN status = 'CANCELLED' THEN 'REFUNDED'
-    ELSE 'PAID'
-  END AS status,
-  CASE WHEN status = 'WAITING_PAYMENT' THEN CONCAT('https://openapi-sandbox.dl.alipaydev.com/gateway.do?seed=', id) ELSE NULL END AS pay_entry,
-  CASE WHEN status = 'WAITING_PAYMENT' THEN DATE_ADD(created_at, INTERVAL 3 HOUR) ELSE DATE_ADD(created_at, INTERVAL 30 MINUTE) END AS expire_at,
-  CASE WHEN status IN ('WAITING_PAYMENT') OR (status = 'CANCELLED' AND cancel_reason = 'PAYMENT_EXPIRED') THEN NULL ELSE DATE_ADD(created_at, INTERVAL 5 MINUTE) END AS paid_at,
-  CASE WHEN status = 'CANCELLED' AND cancel_reason <> 'PAYMENT_EXPIRED' THEN cancelled_at ELSE NULL END AS refunded_at,
-  CASE WHEN status = 'COMPLETED' THEN completed_at ELSE NULL END AS settled_at,
-  CASE WHEN status = 'CANCELLED' AND cancel_reason = 'PAYMENT_EXPIRED' THEN cancelled_at ELSE NULL END AS closed_at,
-  CASE WHEN status = 'CANCELLED' THEN cancel_reason ELSE NULL END AS close_reason,
-  NULL AS failure_reason,
-  COALESCE(completed_at, cancelled_at, accepted_at, created_at) AS status_changed_at,
-  created_at,
-  COALESCE(completed_at, cancelled_at, accepted_at, created_at) AS updated_at
-FROM seed_pickups
-WHERE reward_type = 'PAID';
-
--- ---------------------------------------------------------------------
 -- 10. pickup_requests 代取请求
 -- ---------------------------------------------------------------------
 INSERT INTO pickup_requests
   (id, publisher_id, acceptor_id, campus, pickup_location, delivery_location, item_description,
-   reward_type, reward_amount, pickup_credential_file_id, completion_proof_file_id, payment_id,
+   reward_type, reward_amount, pickup_credential_file_id, completion_proof_file_id,
    status, cancel_reason, cancel_detail, accept_deadline, accepted_at, completed_at, cancelled_at, created_at, updated_at)
 SELECT
   id, publisher_id, acceptor_id, campus, pickup_location, delivery_location, item_description,
   reward_type, reward_amount, 1000 + id AS pickup_credential_file_id,
   CASE WHEN status = 'COMPLETED' THEN 2000 + id ELSE NULL END AS completion_proof_file_id,
-  CASE WHEN reward_type = 'PAID' THEN 3000 + id ELSE NULL END AS payment_id,
   status, cancel_reason, cancel_detail, accept_deadline, accepted_at, completed_at, cancelled_at,
   created_at, COALESCE(completed_at, cancelled_at, accepted_at, created_at) AS updated_at
 FROM seed_pickups;
@@ -558,24 +527,6 @@ SELECT
 FROM seed_pickups
 WHERE status IN ('IN_PROGRESS', 'COMPLETED', 'CANCELLED');
 
--- 待支付提醒通知。
-INSERT INTO notifications
-  (id, receiver_id, type, title, content, business_type, business_id, is_read, read_at, created_at, updated_at)
-SELECT
-  4000 + id AS id,
-  publisher_id AS receiver_id,
-  'PAYMENT' AS type,
-  '代取请求待支付' AS title,
-  '您发布的有报酬代取请求尚未完成支付，请在支付有效期内处理。' AS content,
-  'PICKUP_REQUEST' AS business_type,
-  id AS business_id,
-  0 AS is_read,
-  NULL AS read_at,
-  created_at,
-  created_at AS updated_at
-FROM seed_pickups
-WHERE status = 'WAITING_PAYMENT';
-
 -- 评价通知。
 INSERT INTO notifications
   (id, receiver_id, type, title, content, business_type, business_id, is_read, read_at, created_at, updated_at)
@@ -604,7 +555,7 @@ DROP TEMPORARY TABLE IF EXISTS seed_numbers;
 --   SELECT COUNT(*) FROM users;
 --   SELECT status, COUNT(*) FROM pickup_requests GROUP BY status ORDER BY status;
 --   SELECT reward_type, COUNT(*) FROM pickup_requests GROUP BY reward_type;
---   SELECT status, COUNT(*) FROM payment_records GROUP BY status ORDER BY status;
+--   SELECT type, COUNT(*) FROM point_transactions GROUP BY type ORDER BY type;
 --   SELECT rating_level, COUNT(*) FROM evaluations GROUP BY rating_level ORDER BY rating_level;
 --   SELECT type, COUNT(*) FROM notifications GROUP BY type ORDER BY type;
 -- =====================================================================

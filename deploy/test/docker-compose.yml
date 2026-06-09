@@ -57,6 +57,7 @@ services:
       DB_PASSWORD: ${MYSQL_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       FILE_STORAGE_ROOT: ${FILE_STORAGE_ROOT}
+      TZ: Asia/Shanghai
 
     volumes:
       - backend-file-root-test:${FILE_STORAGE_ROOT}
