@@ -3,10 +3,11 @@ stages:
 
 deploy:
   stage: deploy
-  image: kroniak/ssh-client:3.19
-
+  image: alpine:3.20
 
   before_script:
+    - sed -i 's/dl-cdn.alpinelinux.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apk/repositories
+    - apk add --no-cache openssh-client
     - mkdir -p ~/.ssh
     - cp "$SERVER_SSH_KEY" ~/.ssh/id_ed25519
     - chmod 600 ~/.ssh/id_ed25519
