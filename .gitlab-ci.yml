@@ -30,7 +30,7 @@ deploy:
     include:
       - local: .gitlab/deploy.yml
   rules:
-    - if: '$CI_COMMIT_BRANCH == "dev"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
       changes:
         - backend/**/*
         - frontend/**/*

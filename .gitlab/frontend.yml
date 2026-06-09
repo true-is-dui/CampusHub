@@ -34,4 +34,4 @@ frontend-docker-build:
     - docker build -f ./frontend/Dockerfile-prod -t "$FRONTEND_IMAGE" ./frontend
     - docker push "$FRONTEND_IMAGE"
   rules:
-    - if: '$CI_COMMIT_BRANCH == "dev"'
+    - if: '$CI_COMMIT_BRANCH == "main"'

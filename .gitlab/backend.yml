@@ -50,4 +50,4 @@ backend-docker-build:
     - docker build -f ./backend/Dockerfile-prod -t "$BACKEND_IMAGE" ./backend
     - docker push "$BACKEND_IMAGE"
   rules:
-    - if: '$CI_COMMIT_BRANCH == "dev"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
