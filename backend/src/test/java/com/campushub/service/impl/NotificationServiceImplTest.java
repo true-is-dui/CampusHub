@@ -22,8 +22,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -54,6 +56,15 @@ class NotificationServiceImplTest {
         assertThat(saved.getBusinessType()).isEqualTo("PICKUP_REQUEST");
         assertThat(saved.getBusinessId()).isEqualTo(10L);
         assertThat(saved.getIsRead()).isFalse();
+    }
+
+    @Test
+    void createNotice_swallowsInsertFailure_doesNotThrow() {
+        doThrow(new RuntimeException("db down")).when(notificationRecordMapper).insert(any(NotificationRecord.class));
+
+        // 通知是旁路功能：insert 失败不应向调用方（主业务）抛出。
+        assertThatCode(() -> notificationService.createNotice(7L, NotificationType.SYSTEM,
+                "标题", "内容", null, null)).doesNotThrowAnyException();
     }
 
     @Test

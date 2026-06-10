@@ -7,10 +7,12 @@ import com.campushub.common.ErrorReason;
 import com.campushub.dto.user.LoginSession;
 import com.campushub.entity.User;
 import com.campushub.entity.enums.AuthStatus;
+import com.campushub.entity.enums.NotificationType;
 import com.campushub.entity.enums.UserRole;
 import com.campushub.mapper.UserMapper;
 import com.campushub.security.JwtUtil;
 import com.campushub.service.AuthService;
+import com.campushub.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -38,6 +40,7 @@ public class AuthServiceImpl implements AuthService {
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final NotificationService notificationService;
 
     @Override
     @Transactional
@@ -65,6 +68,10 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(ErrorCode.CONFLICT,
                     ErrorReason.DUPLICATE_OR_CONFLICTED_OPERATION, "用户名已被占用");
         }
+
+        // 注册成功欢迎通知（引导完成实名认证）；insert 后主键已回填。
+        notificationService.createNotice(user.getId(), NotificationType.SYSTEM,
+                "欢迎加入校园代取", "注册成功！完成实名认证即可发布和接单代取服务。", null, null);
     }
 
     @Override

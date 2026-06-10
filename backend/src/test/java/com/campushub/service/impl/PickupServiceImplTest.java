@@ -87,6 +87,9 @@ class PickupServiceImplTest {
         verify(userService).ensureCertified(1L);
         verify(pointService, never()).spendForPublish(anyLong(), anyLong(), any());
         verify(pickupRequestMapper).insert(any(PickupRequest.class));
+        // 发布成功通知发布方自己（PICKUP）。
+        verify(notificationService).createNotice(eq(1L), eq(NotificationType.PICKUP),
+                anyString(), anyString(), any(), any());
     }
 
     @Test
@@ -185,6 +188,33 @@ class PickupServiceImplTest {
         assertThat(result.getStatus()).isEqualTo(PickupStatus.COMPLETED);
         // 完成把报酬积分转入接单方（发布方 1L、接单方 2L、10 积分）。
         verify(pointService).transferOnComplete(eq(1L), eq(2L), eq(10L), eq(10L));
+        // 有报酬完成：接单方收到独立的入账通知（PAYMENT）+ 确认完成通知（PICKUP）。
+        verify(notificationService).createNotice(eq(2L), eq(NotificationType.PAYMENT),
+                anyString(), anyString(), any(), eq(10L));
+        verify(notificationService).createNotice(eq(2L), eq(NotificationType.PICKUP),
+                anyString(), anyString(), any(), eq(10L));
+    }
+
+    @Test
+    void confirmComplete_unpaid_noPaymentNotice() {
+        PickupRequest p = waitingAccept(10L, 1L);
+        p.setStatus(PickupStatus.IN_PROGRESS);
+        p.setAcceptorId(2L);
+        p.setRewardType(RewardType.UNPAID);
+        p.setRewardAmount(null);
+        p.setCompletionProofFileId(77L);
+        when(pickupRequestMapper.selectById(10L)).thenReturn(p);
+        when(pickupRequestMapper.update(any(), any())).thenReturn(1);
+
+        var result = pickupService.confirmComplete(10L, 1L);
+
+        assertThat(result.getStatus()).isEqualTo(PickupStatus.COMPLETED);
+        // 无报酬不转积分、不发入账通知；仍发确认完成通知（PICKUP）。
+        verify(pointService, never()).transferOnComplete(anyLong(), anyLong(), anyLong(), any());
+        verify(notificationService, never()).createNotice(any(), eq(NotificationType.PAYMENT),
+                any(), any(), any(), any());
+        verify(notificationService).createNotice(eq(2L), eq(NotificationType.PICKUP),
+                anyString(), anyString(), any(), eq(10L));
     }
 
     @Test

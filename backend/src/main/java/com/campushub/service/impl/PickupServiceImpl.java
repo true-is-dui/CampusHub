@@ -107,6 +107,10 @@ public class PickupServiceImpl implements PickupService {
                     toPoints(request.getRewardAmount()), pickup.getId());
         }
 
+        notificationService.createNotice(currentUserId, NotificationType.PICKUP,
+                "代取服务发布成功", "您的代取服务已发布，正在等待其他用户接单。",
+                BusinessType.PICKUP_REQUEST.name(), pickup.getId());
+
         return PickupCreateResult.builder()
                 .pickupId(pickup.getId())
                 .status(pickup.getStatus())
@@ -266,6 +270,10 @@ public class PickupServiceImpl implements PickupService {
         if (pickup.isPaid()) {
             pointService.transferOnComplete(pickup.getPublisherId(), pickup.getAcceptorId(),
                     toPoints(pickup.getRewardAmount()), pickup.getId());
+            // 报酬入账提醒（独立于下方的「确认完成」业务通知，一业务一账务）。
+            notificationService.createNotice(pickup.getAcceptorId(), NotificationType.PAYMENT,
+                    "报酬积分已到账", "本次代取服务的报酬积分已转入您的账户。",
+                    BusinessType.PICKUP_REQUEST.name(), pickup.getId());
         }
         notificationService.createNotice(pickup.getAcceptorId(), NotificationType.PICKUP,
                 "代取服务已确认完成", "发布方已确认完成本次代取服务，感谢您的帮助。",
