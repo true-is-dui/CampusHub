@@ -24,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -61,6 +62,9 @@ class VerificationReviewServiceImplTest {
         assertThat(review.getStatus()).isEqualTo(ReviewStatus.PENDING);
         verify(fileStorageService).updateBusinessTrace(88L, FileBusinessType.VERIFICATION_REVIEW, review.getId());
         verify(userService).markVerificationSubmitted(7L);
+        // 提交后通知申请人「已受理」（VERIFICATION，无业务关联）。
+        verify(notificationService).createNotice(eq(7L), eq(NotificationType.VERIFICATION),
+                any(), any(), isNull(), isNull());
     }
 
     @Test

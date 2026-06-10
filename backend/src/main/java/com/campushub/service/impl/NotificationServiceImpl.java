@@ -13,6 +13,8 @@ import com.campushub.entity.enums.NotificationType;
 import com.campushub.mapper.NotificationRecordMapper;
 import com.campushub.service.NotificationService;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -22,26 +24,37 @@ import java.util.List;
  *
  * <p>纯数据库通知记录（无 WebSocket/MQ）。已读状态用实体的 {@code Boolean read}（is_read 列）
  * 存储，对外经 {@link NotificationItem} 映射为契约的 {@code readStatus}（UNREAD/READ）。
+ *
+ * <p>{@code createNotice} 是业务模块在状态变更后的<b>旁路调用</b>：通知是辅助功能，
+ * 发送失败不应拖垮主业务，故内部吞异常 + 记 warn 日志，不向调用方抛出。
  */
 @Service
 @RequiredArgsConstructor
 public class NotificationServiceImpl implements NotificationService {
+
+    private static final Logger log = LoggerFactory.getLogger(NotificationServiceImpl.class);
 
     private final NotificationRecordMapper notificationRecordMapper;
 
     @Override
     public void createNotice(Long receiverId, NotificationType type, String title, String content,
                              String businessType, Long businessId) {
-        NotificationRecord record = new NotificationRecord();
-        record.setReceiverId(receiverId);
-        record.setType(type);
-        record.setTitle(title);
-        record.setContent(content);
-        record.setBusinessType(businessType);
-        record.setBusinessId(businessId);
-        record.setIsRead(false);
-        // createdAt/updatedAt 由 TimeFieldFillHandler 自动填充。
-        notificationRecordMapper.insert(record);
+        try {
+            NotificationRecord record = new NotificationRecord();
+            record.setReceiverId(receiverId);
+            record.setType(type);
+            record.setTitle(title);
+            record.setContent(content);
+            record.setBusinessType(businessType);
+            record.setBusinessId(businessId);
+            record.setIsRead(false);
+            // createdAt/updatedAt 由 TimeFieldFillHandler 自动填充。
+            notificationRecordMapper.insert(record);
+        } catch (Exception e) {
+            // 通知是旁路功能，发送失败只记日志，不向主业务抛出（避免一条通知失败回滚主业务）。
+            log.warn("createNotice failed: receiverId={}, type={}, businessId={}",
+                    receiverId, type, businessId, e);
+        }
     }
 
     @Override

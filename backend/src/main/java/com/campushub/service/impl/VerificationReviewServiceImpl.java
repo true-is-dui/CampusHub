@@ -90,6 +90,8 @@ public class VerificationReviewServiceImpl implements VerificationReviewService 
 
         // 用户认证状态置为审核中（含「已通过不能重复提交」校验），归口 UserService
         userService.markVerificationSubmitted(userId);
+        notificationService.createNotice(userId, NotificationType.VERIFICATION,
+                "实名认证已提交", "您的实名认证申请已提交，请等待管理员审核。", null, null);
         return new VerificationSubmitResponse(AuthStatus.REVIEWING);
     }
 
