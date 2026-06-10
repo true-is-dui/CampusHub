@@ -2,15 +2,45 @@
   <div v-loading="loading" class="evaluation-page">
     <el-page-header @back="$router.back()">
       <template #content>
-        <span>评价</span>
+        <span>{{ pageTitle }}</span>
       </template>
     </el-page-header>
 
-    <template v-if="eligibility">
+    <template v-if="receivedMode">
+      <el-card v-if="receivedEvaluation" class="evaluation-card" shadow="never">
+        <div class="reviewee-info">
+          <el-avatar :size="48" :src="avatarUrl" icon="UserFilled" />
+          <div class="reviewee-text">
+            <span class="reviewee-label">对方对您的评价</span>
+            <span class="reviewee-name">{{ receivedEvaluation.reviewer?.nickname || '匿名用户' }}</span>
+          </div>
+        </div>
+        <el-divider />
+        <div class="eval-display">
+          <el-tag :type="getRatingTag(receivedEvaluation.ratingLevel)" size="large">
+            {{ getRatingLabel(receivedEvaluation.ratingLevel) }}
+          </el-tag>
+          <p class="eval-content">{{ receivedEvaluation.content || '对方未填写评价内容' }}</p>
+          <p class="eval-time">{{ formatTime(receivedEvaluation.createdAt) }}</p>
+          <el-button type="primary" plain @click="goPickupDetail">
+            查看代取服务
+          </el-button>
+        </div>
+      </el-card>
+      <el-card v-else-if="!loading" class="evaluation-card" shadow="never">
+        <el-result
+            icon="info"
+            title="暂无评价"
+            sub-title="未找到该代取服务中您收到的评价"
+        />
+      </el-card>
+    </template>
+
+    <template v-else-if="eligibility">
       <!-- 可以评价 -->
       <el-card v-if="eligibility.canEvaluate" class="evaluation-card" shadow="never">
         <div class="reviewee-info">
-          <el-avatar :size="48" :src="revieweeAvatarUrl" icon="UserFilled" />
+          <el-avatar :size="48" :src="avatarUrl" icon="UserFilled" />
           <div class="reviewee-text">
             <span class="reviewee-label">评价对象</span>
             <span class="reviewee-name">{{ eligibility.reviewee?.nickname || '匿名用户' }}</span>
@@ -49,7 +79,7 @@
       <!-- 已有评价：展示对方的评价 -->
       <el-card v-else-if="eligibility.evaluation" class="evaluation-card" shadow="never">
         <div class="reviewee-info">
-          <el-avatar :size="48" :src="revieweeAvatarUrl" icon="UserFilled" />
+          <el-avatar :size="48" :src="avatarUrl" icon="UserFilled" />
           <div class="reviewee-text">
             <span class="reviewee-label">{{ eligibility.reviewee?.nickname || '匿名用户' }} 对您的评价</span>
           </div>
@@ -77,10 +107,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getEvaluationEligibility, submitEvaluation } from '@/api/pickup'
+import { getEvaluationEligibility, getReceivedEvaluation, submitEvaluation } from '@/api/pickup'
 import { getUserAvatar } from '@/api/user'
 
 const route = useRoute()
@@ -88,7 +118,11 @@ const router = useRouter()
 const loading = ref(true)
 const submitting = ref(false)
 const eligibility = ref(null)
-const revieweeAvatarUrl = ref('')
+const receivedEvaluation = ref(null)
+const avatarUrl = ref('')
+
+const receivedMode = computed(() => route.query.mode === 'received')
+const pageTitle = computed(() => receivedMode.value ? '收到的评价' : '评价')
 
 const evalForm = reactive({
   ratingLevel: 'GOOD',
@@ -112,6 +146,10 @@ function formatTime(dateStr) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+function goPickupDetail() {
+  router.push(`/pickup/${route.params.pickupId}`)
+}
+
 // [新增] 不可评价原因映射
 const reasonMap = {
   NOT_COMPLETED: '代取服务尚未完成，完成后才能评价',
@@ -123,6 +161,35 @@ const reasonLabel = computed(() => {
   return reasonMap[eligibility.value?.reason] || eligibility.value?.reason || '无法评价'
 })
 
+function revokeAvatar() {
+  if (avatarUrl.value) {
+    URL.revokeObjectURL(avatarUrl.value)
+    avatarUrl.value = ''
+  }
+}
+
+async function loadAvatar(userId) {
+  revokeAvatar()
+  if (!userId) return
+  try {
+    const blob = await getUserAvatar(userId)
+    avatarUrl.value = URL.createObjectURL(blob)
+  } catch { /* 无头像时显示默认头像 */ }
+}
+
+async function loadReceivedEvaluation() {
+  loading.value = true
+  try {
+    const res = await getReceivedEvaluation(route.params.pickupId)
+    receivedEvaluation.value = res
+    await loadAvatar(res?.reviewer?.userId)
+  } catch {
+    // error handled by interceptor
+  } finally {
+    loading.value = false
+  }
+}
+
 async function loadEligibility() {
   loading.value = true
   try {
@@ -131,12 +198,7 @@ async function loadEligibility() {
     eligibility.value = res
 
     // 加载被评价人头像
-    if (res?.reviewee?.userId) {
-      try {
-        const blob = await getUserAvatar(res.reviewee.userId)
-        revieweeAvatarUrl.value = URL.createObjectURL(blob)
-      } catch { /* ignore */ }
-    }
+    await loadAvatar(res?.reviewee?.userId)
   } catch {
     // error handled by interceptor
   } finally {
@@ -168,7 +230,15 @@ async function handleSubmit() {
 }
 
 onMounted(() => {
-  loadEligibility()
+  if (receivedMode.value) {
+    loadReceivedEvaluation()
+  } else {
+    loadEligibility()
+  }
+})
+
+onUnmounted(() => {
+  revokeAvatar()
 })
 </script>
 

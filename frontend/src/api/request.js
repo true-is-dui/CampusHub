@@ -75,14 +75,23 @@ request.interceptors.response.use(
         return res.data           // 成功时返回 ApiResponse.data
       }
       // 业务码非 0，直接交给错误处理分支（抛出包含业务码的对象）
-      return Promise.reject(res)
+      return Promise.reject({ ...res, config: response.config })
     },
     error => {
+      const errorConfig = error.config || error.response?.config || {}
+      const silentError = Boolean(errorConfig.silentError)
+      const silentReasons = Array.isArray(errorConfig.silentReasons) ? errorConfig.silentReasons : []
+      const shouldSilence = (reason) => silentError || (reason && silentReasons.includes(reason))
+
       // 处理由上方 Promise.reject(res) 抛出的业务错误对象
       if (typeof error.code === 'number' && error.message) {
         const { code, message, errors } = error
         const reason = errors?.reason
         const { message: displayMsg, shouldLogout } = buildErrorInfo(code, reason, message)
+
+        if (shouldSilence(reason)) {
+          return Promise.reject(error)
+        }
 
         if (code === 40001) {
           // 参数校验失败：展示结构化字段错误
@@ -111,7 +120,9 @@ request.interceptors.response.use(
           const code = parsed?.code || error.response?.status || 0
           const reason = parsed?.errors?.reason
           const message = parsed?.message || '请求失败'
-          handleHttpError(code, reason, message)
+          if (!shouldSilence(reason)) {
+            handleHttpError(code, reason, message)
+          }
           return Promise.reject(error)
         })
       }
@@ -119,7 +130,9 @@ request.interceptors.response.use(
       const code = res?.code || error.response?.status || 0
       const reason = res?.errors?.reason
       const message = res?.message || '请求失败'
-      handleHttpError(code, reason, message)
+      if (!shouldSilence(reason)) {
+        handleHttpError(code, reason, message)
+      }
       return Promise.reject(error)
     }
 )

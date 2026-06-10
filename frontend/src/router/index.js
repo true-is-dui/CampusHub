@@ -19,14 +19,16 @@ const routes = [
 
       { path: 'profile', component: () => import('../views/user/ProfileView.vue'), meta: { auth: true } },
       { path: 'verification', component: () => import('../views/user/VerificationView.vue'), meta: { auth: true } },
-      { path: 'notifications', component: () => import('../views/notification/NotificationList.vue'), meta: { auth: true } },
+      { path: 'notifications', redirect: '/hall', meta: { auth: true } },
       { path: 'user/:id', component: () => import('../views/user/UserPublicProfile.vue') },
 
       { path: 'evaluation/:pickupId', component: () => import('../views/pickup/EvaluationView.vue'), meta: { auth: true } },
 
       { path: 'admin/verification', component: () => import('../views/admin/VerificationReview.vue'), meta: { auth: true, admin: true } },
       { path: 'transactions', component: () => import('../views/user/TransactionList.vue'), meta: { auth: true } },
-      { path: 'payment/:id', component: () => import('../views/user/PaymentDetail.vue'), meta: { auth: true } }
+      { path: 'points', component: () => import('../views/user/PaymentDetail.vue'), meta: { auth: true } },
+      { path: 'my-evaluations', component: () => import('../views/user/MyEvaluations.vue'), meta: { auth: true } },
+      { path: 'payment/:id', redirect: '/points' }
     ]
   },
   // 404 页面：对所有用户可见，不添加 guest 限制

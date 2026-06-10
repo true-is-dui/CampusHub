@@ -97,18 +97,92 @@
 
       <!-- 参与者 -->
       <div class="participants">
-        <el-card class="participant-card" shadow="never" @click="goUserPublicProfile(detail.publisher?.userId)">
-          <el-avatar :size="48" :src="publisherAvatarUrl" icon="UserFilled" />
-          <div class="participant-info">
-            <el-tag size="small" type="primary">发布者</el-tag>
-            <span class="participant-name clickable">{{ detail.publisher?.nickname || '匿名用户' }}</span>
+        <el-card class="participant-card" shadow="never">
+          <div class="participant-main" @click="goUserPublicProfile(detail.publisher?.userId)">
+            <el-avatar :size="48" :src="publisherAvatarUrl" icon="UserFilled" />
+            <div class="participant-info">
+              <el-tag size="small" type="primary">发布者</el-tag>
+              <span class="participant-name clickable">{{ detail.publisher?.nickname || '匿名用户' }}</span>
+            </div>
+          </div>
+          <div v-if="detail.status === 'COMPLETED'" class="participant-evaluation">
+            <template v-if="getEvaluationByRevieweeRole('PUBLISHER')">
+              <div class="eval-header compact">
+                <el-tag :type="getRatingTag(getEvaluationByRevieweeRole('PUBLISHER').ratingLevel)" size="small">
+                  {{ getRatingLabel(getEvaluationByRevieweeRole('PUBLISHER').ratingLevel) }}
+                </el-tag>
+                <span class="eval-time">{{ formatDateTime(getEvaluationByRevieweeRole('PUBLISHER').createdAt) }}</span>
+              </div>
+              <p class="eval-content">{{ getEvaluationByRevieweeRole('PUBLISHER').content || '未填写评价内容' }}</p>
+            </template>
+            <template v-else-if="shouldShowEvalFormForRole('PUBLISHER')">
+              <div class="eval-form-title">评价发布者</div>
+              <el-form :model="evalForm" label-width="48px" class="inline-eval-form">
+                <el-form-item label="评分">
+                  <el-radio-group v-model="evalForm.ratingLevel">
+                    <el-radio value="GOOD">好评</el-radio>
+                    <el-radio value="NEUTRAL">中评</el-radio>
+                    <el-radio value="BAD">差评</el-radio>
+                  </el-radio-group>
+                </el-form-item>
+                <el-form-item label="评价">
+                  <el-input
+                      v-model="evalForm.content"
+                      type="textarea"
+                      :rows="3"
+                      placeholder="请输入评价内容（差评必填）"
+                      :maxlength="300"
+                      show-word-limit
+                  />
+                </el-form-item>
+                <el-button type="primary" :loading="evalLoading" @click="submitEval">提交评价</el-button>
+              </el-form>
+            </template>
+            <div v-else class="eval-placeholder">{{ getNoEvaluationText('PUBLISHER') }}</div>
           </div>
         </el-card>
-        <el-card v-if="detail.acceptor" class="participant-card" shadow="never" @click="goUserPublicProfile(detail.acceptor?.userId)">
-          <el-avatar :size="48" :src="acceptorAvatarUrl" icon="UserFilled" />
-          <div class="participant-info">
-            <el-tag size="small" type="success">接单者</el-tag>
-            <span class="participant-name clickable">{{ detail.acceptor?.nickname || '匿名用户' }}</span>
+        <el-card v-if="detail.acceptor" class="participant-card" shadow="never">
+          <div class="participant-main" @click="goUserPublicProfile(detail.acceptor?.userId)">
+            <el-avatar :size="48" :src="acceptorAvatarUrl" icon="UserFilled" />
+            <div class="participant-info">
+              <el-tag size="small" type="success">接单者</el-tag>
+              <span class="participant-name clickable">{{ detail.acceptor?.nickname || '匿名用户' }}</span>
+            </div>
+          </div>
+          <div v-if="detail.status === 'COMPLETED'" class="participant-evaluation">
+            <template v-if="getEvaluationByRevieweeRole('ACCEPTOR')">
+              <div class="eval-header compact">
+                <el-tag :type="getRatingTag(getEvaluationByRevieweeRole('ACCEPTOR').ratingLevel)" size="small">
+                  {{ getRatingLabel(getEvaluationByRevieweeRole('ACCEPTOR').ratingLevel) }}
+                </el-tag>
+                <span class="eval-time">{{ formatDateTime(getEvaluationByRevieweeRole('ACCEPTOR').createdAt) }}</span>
+              </div>
+              <p class="eval-content">{{ getEvaluationByRevieweeRole('ACCEPTOR').content || '未填写评价内容' }}</p>
+            </template>
+            <template v-else-if="shouldShowEvalFormForRole('ACCEPTOR')">
+              <div class="eval-form-title">评价接单者</div>
+              <el-form :model="evalForm" label-width="48px" class="inline-eval-form">
+                <el-form-item label="评分">
+                  <el-radio-group v-model="evalForm.ratingLevel">
+                    <el-radio value="GOOD">好评</el-radio>
+                    <el-radio value="NEUTRAL">中评</el-radio>
+                    <el-radio value="BAD">差评</el-radio>
+                  </el-radio-group>
+                </el-form-item>
+                <el-form-item label="评价">
+                  <el-input
+                      v-model="evalForm.content"
+                      type="textarea"
+                      :rows="3"
+                      placeholder="请输入评价内容（差评必填）"
+                      :maxlength="300"
+                      show-word-limit
+                  />
+                </el-form-item>
+                <el-button type="primary" :loading="evalLoading" @click="submitEval">提交评价</el-button>
+              </el-form>
+            </template>
+            <div v-else class="eval-placeholder">{{ getNoEvaluationText('ACCEPTOR') }}</div>
           </div>
         </el-card>
       </div>
@@ -123,46 +197,6 @@
       <el-card v-if="completionProofUrl" class="image-card" shadow="never">
         <template #header><span>完成凭证</span></template>
         <el-image :src="completionProofUrl" :preview-src-list="[completionProofUrl]" fit="contain" class="proof-image" />
-      </el-card>
-
-      <!-- 评价 -->
-      <el-card v-if="detail.status === 'COMPLETED'" class="eval-card" shadow="never">
-        <template #header><span>评价</span></template>
-        <template v-if="evaluation">
-          <div class="eval-display">
-            <div class="eval-header">
-              <el-tag :type="getRatingTag(evaluation.ratingLevel)" size="large">
-                {{ getRatingLabel(evaluation.ratingLevel) }}
-              </el-tag>
-            </div>
-            <p class="eval-content">{{ evaluation.content }}</p>
-          </div>
-        </template>
-        <template v-else-if="canEvaluate">
-          <el-form :model="evalForm" label-width="60px">
-            <el-form-item label="评分">
-              <el-radio-group v-model="evalForm.ratingLevel">
-                <el-radio value="GOOD">好评</el-radio>
-                <el-radio value="NEUTRAL">中评</el-radio>
-                <el-radio value="BAD">差评</el-radio>
-              </el-radio-group>
-            </el-form-item>
-            <el-form-item label="评价">
-              <el-input
-                  v-model="evalForm.content"
-                  type="textarea"
-                  :rows="3"
-                  placeholder="请输入评价内容（差评必填）"
-                  :maxlength="300"
-                  show-word-limit
-              />
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" :loading="evalLoading" @click="submitEval">提交评价</el-button>
-            </el-form-item>
-          </el-form>
-        </template>
-        <el-empty v-else description="暂无评价" :image-size="80" />
       </el-card>
 
       <!-- 操作按钮 -->
@@ -206,6 +240,7 @@ import {
   confirmComplete,
   cancelPickup,
   submitEvaluation,
+  getPickupEvaluations,
   getEvaluationEligibility
 } from '@/api/pickup'
 import { getUserAvatar } from '@/api/user'
@@ -218,7 +253,7 @@ const actionLoading = ref(false)
 const evalLoading = ref(false)
 const detail = ref(null)
 const proofFile = ref(null)
-const evaluation = ref(null)
+const evaluations = ref([])
 const canEvaluate = ref(false)
 const evalForm = reactive({ ratingLevel: 'GOOD', content: '' })
 const proofUploadRef = ref(null)
@@ -289,6 +324,33 @@ function getRatingLabel(level) {
   return map[level] || level
 }
 
+function getCurrentUserRole() {
+  if (isPublisher.value) return 'PUBLISHER'
+  if (isAcceptor.value) return 'ACCEPTOR'
+  return null
+}
+
+function getEvaluationTargetRole() {
+  if (isPublisher.value) return 'ACCEPTOR'
+  if (isAcceptor.value) return 'PUBLISHER'
+  return null
+}
+
+function getEvaluationByRevieweeRole(role) {
+  return evaluations.value.find(item => item.revieweeRoleInBusiness === role) || null
+}
+
+function shouldShowEvalFormForRole(role) {
+  return canEvaluate.value && getEvaluationTargetRole() === role
+}
+
+function getNoEvaluationText(role) {
+  if (getCurrentUserRole() === role) {
+    return '对方暂未评价'
+  }
+  return '暂未评价'
+}
+
 // 格式化日期时间为 YYYY-MM-DD HH:mm
 function formatDateTime(dateStr) {
   if (!dateStr) return ''
@@ -312,6 +374,7 @@ async function loadDetail() {
     completionProofUrl.value = ''
     publisherAvatarUrl.value = ''
     acceptorAvatarUrl.value = ''
+    evaluations.value = []
 
     const res = await getPickupDetail(route.params.id)
     detail.value = res
@@ -328,10 +391,15 @@ async function loadDetail() {
           const credBlob = await getPickupCredential(detail.value.pickupId)
           credentialUrl.value = URL.createObjectURL(credBlob)
         } catch { /* 无权限时忽略 */ }
-        try {
-          const proofBlob = await getCompletionProof(detail.value.pickupId)
-          completionProofUrl.value = URL.createObjectURL(proofBlob)
-        } catch { /* 无凭证时忽略 */ }
+        if (detail.value.status === 'IN_PROGRESS' || detail.value.status === 'COMPLETED') {
+          try {
+            const proofConfig = detail.value.status === 'IN_PROGRESS'
+                ? { silentReasons: ['COMPLETION_PROOF_NOT_AVAILABLE'] }
+                : {}
+            const proofBlob = await getCompletionProof(detail.value.pickupId, proofConfig)
+            completionProofUrl.value = URL.createObjectURL(proofBlob)
+          } catch { /* 无凭证时按状态由拦截器决定是否提示 */ }
+        }
       }
     }
 
@@ -350,12 +418,17 @@ async function loadDetail() {
 
     if (detail.value.status === 'COMPLETED' && userStore.isLoggedIn) {
       try {
+        evaluations.value = await getPickupEvaluations(route.params.id)
+      } catch { /* ignore */ }
+      try {
         const evalRes = await getEvaluationEligibility(route.params.id)
         canEvaluate.value = evalRes?.canEvaluate || false
-        if (evalRes?.evaluation) {
-          evaluation.value = evalRes.evaluation
-        }
       } catch { /* ignore */ }
+    } else if (detail.value.status === 'COMPLETED') {
+      try {
+        evaluations.value = await getPickupEvaluations(route.params.id)
+      } catch { /* ignore */ }
+      canEvaluate.value = false
     } else {
       canEvaluate.value = false
     }
@@ -468,14 +541,10 @@ async function submitEval() {
   try {
     await submitEvaluation(route.params.id, evalForm)
     ElMessage.success('评价成功')
-    evaluation.value = {
-      ratingLevel: evalForm.ratingLevel,
-      content: evalForm.content,
-      createdAt: new Date().toISOString()
-    }
     canEvaluate.value = false
     evalForm.ratingLevel = 'GOOD'
     evalForm.content = ''
+    await loadDetail()
   } catch {
     // error handled by interceptor
   } finally {
@@ -700,7 +769,6 @@ onMounted(() => {
 }
 
 .participant-card {
-  cursor: pointer;
   transition: box-shadow 0.2s;
 }
 
@@ -710,9 +778,17 @@ onMounted(() => {
 
 .participant-card :deep(.el-card__body) {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: 14px;
   padding: 16px;
+}
+
+.participant-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
 }
 
 .participant-info {
@@ -735,6 +811,11 @@ onMounted(() => {
   text-decoration: underline;
 }
 
+.participant-evaluation {
+  padding-top: 12px;
+  border-top: 1px solid #ebeef5;
+}
+
 /* 图片卡片 */
 .image-card {
   margin-top: 16px;
@@ -747,28 +828,44 @@ onMounted(() => {
   border: 1px solid #ebeef5;
 }
 
-/* 评价 */
-.eval-card {
-  margin-top: 16px;
-}
-
-.eval-display {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
 .eval-header {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.eval-header.compact {
+  justify-content: space-between;
 }
 
 .eval-content {
   color: #606266;
-  margin: 0;
-  font-size: 15px;
+  margin: 8px 0 0;
+  font-size: 14px;
   line-height: 1.6;
+}
+
+.eval-time {
+  color: #909399;
+  font-size: 13px;
+  margin: 0;
+}
+
+.eval-placeholder {
+  color: #909399;
+  font-size: 14px;
+}
+
+.eval-form-title {
+  color: #303133;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 10px;
+}
+
+.inline-eval-form :deep(.el-form-item) {
+  margin-bottom: 12px;
 }
 
 /* 操作按钮 */

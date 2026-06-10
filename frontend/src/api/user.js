@@ -13,7 +13,7 @@ export const getUserProfile = (userId, includeRating = false) =>
 
 // [修改] 改为通过 request 发起 GET 请求，返回二进制图片数据
 export const getUserAvatar = (userId) =>
-    request.get(`/users/${userId}/avatar`, { responseType: 'blob' })
+    request.get(`/users/${userId}/avatar`, { responseType: 'blob', silentError: true })
 
 export const getUserRatingSummary = (userId) => request.get(`/users/${userId}/rating-summary`)
 

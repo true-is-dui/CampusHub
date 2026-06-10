@@ -1,10 +1,14 @@
 <template>
   <div class="notification-list">
-    <el-page-header @back="$router.back()">
-      <template #content>
-        <span>消息通知</span>
-      </template>
-    </el-page-header>
+    <div class="notification-toolbar">
+      <div>
+        <div class="notification-heading">消息通知</div>
+        <div class="notification-subtitle">{{ pagination.total }} 条通知</div>
+      </div>
+      <el-button :loading="loading" circle @click="loadNotifications" aria-label="刷新消息通知">
+        <el-icon><Refresh /></el-icon>
+      </el-button>
+    </div>
 
     <div v-loading="loading" class="notification-content">
       <el-empty v-if="!loading && notifications.length === 0" description="暂无通知" />
@@ -35,10 +39,10 @@
           v-model:current-page="pagination.page"
           v-model:page-size="pagination.pageSize"
           :total="pagination.total"
-          :page-sizes="[10, 20, 50]"
-          layout="total, sizes, prev, pager, next"
+          :pager-count="5"
+          small
+          layout="prev, pager, next"
           @current-change="loadNotifications"
-          @size-change="onPageSizeChange"
       />
     </div>
   </div>
@@ -49,13 +53,14 @@ import { ref, reactive, onMounted, inject } from 'vue'
 import { useRouter } from 'vue-router'
 import { getNotifications, markRead } from '@/api/notification'
 
+const emit = defineEmits(['navigate'])
 const router = useRouter()
 const loading = ref(false)
 const notifications = ref([])
 
 const pagination = reactive({
   page: 1,
-  pageSize: 20,
+  pageSize: 10,
   total: 0
 })
 
@@ -93,11 +98,6 @@ function formatTime(dateStr) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-function onPageSizeChange() {
-  pagination.page = 1
-  loadNotifications()
-}
-
 async function loadNotifications() {
   loading.value = true
   try {
@@ -131,12 +131,16 @@ async function handleRead(item) {
 
   // 根据通知类型跳转到关联页面
   if (item.type === 'EVALUATION' && item.businessId) {
-    router.push(`/evaluation/${item.businessId}`)
+    emit('navigate')
+    router.push({ path: `/evaluation/${item.businessId}`, query: { mode: 'received' } })
   } else if (item.type === 'VERIFICATION') {
+    emit('navigate')
     router.push('/verification')
   } else if (item.type === 'PAYMENT' && item.businessId) {
+    emit('navigate')
     router.push('/transactions')
   } else if (item.businessType === 'PICKUP_REQUEST' && item.businessId) {
+    emit('navigate')
     router.push(`/pickup/${item.businessId}`)
   }
 }
@@ -148,23 +152,51 @@ onMounted(() => {
 
 <style scoped>
 .notification-list {
-  max-width: 800px;
-  margin: 0 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.notification-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.notification-heading {
+  color: #303133;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 24px;
+}
+
+.notification-subtitle {
+  margin-top: 3px;
+  color: #909399;
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .notification-content {
-  margin-top: 20px;
-  min-height: 200px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 2px 8px 0;
 }
 
 .notification-item {
-  padding: 16px;
-  margin-bottom: 8px;
+  padding: 14px;
+  margin-bottom: 10px;
   border-radius: 8px;
   background: #fff;
   border: 1px solid #ebeef5;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.2s, border-color 0.2s;
 }
 
 .notification-item:hover {
@@ -180,12 +212,14 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
   margin-bottom: 8px;
 }
 
 .notification-time {
   color: #909399;
   font-size: 12px;
+  white-space: nowrap;
 }
 
 .notification-title {
@@ -199,11 +233,13 @@ onMounted(() => {
   font-size: 14px;
   color: #606266;
   line-height: 1.5;
+  word-break: break-word;
 }
 
 .pagination-wrapper {
   display: flex;
   justify-content: center;
-  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 1px solid #ebeef5;
 }
 </style>

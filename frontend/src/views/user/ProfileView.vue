@@ -9,7 +9,7 @@
     <!-- 用户头部卡片 -->
     <div class="profile-header">
       <div class="header-left">
-        <el-avatar :size="72" :src="userStore.avatarUrl" icon="UserFilled" />
+        <el-avatar :size="72" :src="userStore.avatarUrl" icon="UserFilled" class="profile-avatar" />
         <div class="header-info">
           <div class="header-name">{{ userInfo?.nickname || userInfo?.username }}</div>
           <div class="header-meta">
@@ -19,7 +19,13 @@
           </div>
         </div>
       </div>
-      <el-button type="primary" plain @click="toggleEdit">编辑资料</el-button>
+      <div class="header-actions">
+        <div class="point-panel">
+          <span class="point-label">积分余额</span>
+          <span class="point-value">{{ pointBalance }}</span>
+        </div>
+        <el-button type="primary" plain @click="toggleEdit">编辑资料</el-button>
+      </div>
     </div>
 
     <!-- 查看模式 -->
@@ -56,14 +62,6 @@
         <div class="quick-card" @click="$router.push('/transactions')">
           <span class="quick-icon">💰</span>
           <span class="quick-label">积分流水</span>
-        </div>
-        <div class="quick-card" @click="$router.push('/my-pickups')">
-          <span class="quick-icon">📦</span>
-          <span class="quick-label">我的代取</span>
-        </div>
-        <div class="quick-card" @click="$router.push('/notifications')">
-          <span class="quick-icon">🔔</span>
-          <span class="quick-label">消息通知</span>
         </div>
       </div>
     </template>
@@ -118,6 +116,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import { updateProfile } from '@/api/user'
+import { getPointBalance } from '@/api/points'
 
 const userStore = useUserStore()
 const isEditing = ref(false)
@@ -126,6 +125,7 @@ const editFormRef = ref(null)
 const avatarUploadRef = ref(null)
 const avatarFile = ref(null)
 const avatarFileList = ref([])
+const pointBalance = ref(0)
 
 const userInfo = computed(() => userStore.userInfo)
 
@@ -214,6 +214,15 @@ function isValueChanged(field) {
   return normalize(current) !== normalize(prev)
 }
 
+async function loadPointStatus() {
+  try {
+    const balanceRes = await getPointBalance()
+    pointBalance.value = balanceRes?.pointBalance ?? 0
+  } catch {
+    // error handled by interceptor
+  }
+}
+
 async function handleSave() {
   const valid = await editFormRef.value.validate().catch(() => false)
   if (!valid) return
@@ -287,6 +296,7 @@ onMounted(async () => {
   if (!userStore.avatarUrl && userStore.userInfo?.userId) {
     await userStore.loadAvatar()
   }
+  await loadPointStatus()
 })
 </script>
 
@@ -306,6 +316,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 20px;
 }
 
 .header-left {
@@ -314,10 +325,45 @@ onMounted(async () => {
   gap: 16px;
 }
 
+.profile-avatar :deep(.el-icon) {
+  font-size: 34px;
+}
+
 .header-info {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.point-panel {
+  min-width: 118px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.16);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+
+.point-label {
+  font-size: 12px;
+  opacity: 0.86;
+}
+
+.point-value {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .header-name {
@@ -376,7 +422,7 @@ onMounted(async () => {
 
 .quick-cards {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 12px;
   margin-top: 16px;
 }
