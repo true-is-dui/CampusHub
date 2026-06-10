@@ -9,17 +9,21 @@
     <template v-if="receivedMode">
       <el-card v-if="receivedEvaluation" class="evaluation-card" shadow="never">
         <div class="reviewee-info">
-          <el-avatar :size="48" :src="avatarUrl" icon="UserFilled" />
-          <div class="reviewee-text">
-            <span class="reviewee-label">对方对您的评价</span>
-            <span class="reviewee-name">{{ receivedEvaluation.reviewer?.nickname || '匿名用户' }}</span>
+          <div class="reviewee-identity">
+            <el-avatar :size="48" :src="avatarUrl" icon="UserFilled" />
+            <div class="reviewee-text">
+              <span class="reviewee-name">{{ receivedEvaluation.reviewer?.nickname || '匿名用户' }}</span>
+              <span
+                  v-if="receivedEvaluation.revieweeRoleInBusiness"
+                  :class="['role-pill', rolePillClass(receivedEvaluation.revieweeRoleInBusiness)]"
+              >
+                {{ roleLabel(receivedEvaluation.revieweeRoleInBusiness) }}
+              </span>
+            </div>
           </div>
+          <RatingTag :level="receivedEvaluation.ratingLevel" size="large" class="eval-rating-tag" />
         </div>
-        <el-divider />
         <div class="eval-display">
-          <el-tag :type="getRatingTag(receivedEvaluation.ratingLevel)" size="large">
-            {{ getRatingLabel(receivedEvaluation.ratingLevel) }}
-          </el-tag>
           <p class="eval-content">{{ receivedEvaluation.content || '对方未填写评价内容' }}</p>
           <p class="eval-time">{{ formatTime(receivedEvaluation.createdAt) }}</p>
           <el-button type="primary" plain @click="goPickupDetail">
@@ -52,9 +56,9 @@
         <el-form :model="evalForm" label-width="80px">
           <el-form-item label="评分" required>
             <el-radio-group v-model="evalForm.ratingLevel">
-              <el-radio value="GOOD">好评</el-radio>
-              <el-radio value="NEUTRAL">中评</el-radio>
-              <el-radio value="BAD">差评</el-radio>
+              <el-radio value="GOOD"><RatingLevelLabel level="GOOD" /></el-radio>
+              <el-radio value="NEUTRAL"><RatingLevelLabel level="NEUTRAL" /></el-radio>
+              <el-radio value="BAD"><RatingLevelLabel level="BAD" /></el-radio>
             </el-radio-group>
           </el-form-item>
           <el-form-item label="评价内容">
@@ -79,16 +83,16 @@
       <!-- 已有评价：展示对方的评价 -->
       <el-card v-else-if="eligibility.evaluation" class="evaluation-card" shadow="never">
         <div class="reviewee-info">
-          <el-avatar :size="48" :src="avatarUrl" icon="UserFilled" />
-          <div class="reviewee-text">
-            <span class="reviewee-label">{{ eligibility.reviewee?.nickname || '匿名用户' }} 对您的评价</span>
+          <div class="reviewee-identity">
+            <el-avatar :size="48" :src="avatarUrl" icon="UserFilled" />
+            <div class="reviewee-text">
+              <span class="reviewee-name">{{ eligibility.reviewee?.nickname || '匿名用户' }}</span>
+              <span class="reviewee-label">对您的评价</span>
+            </div>
           </div>
+          <RatingTag :level="eligibility.evaluation.ratingLevel" size="large" class="eval-rating-tag" />
         </div>
-        <el-divider />
         <div class="eval-display">
-          <el-tag :type="getRatingTag(eligibility.evaluation.ratingLevel)" size="large">
-            {{ getRatingLabel(eligibility.evaluation.ratingLevel) }}
-          </el-tag>
           <p class="eval-content">{{ eligibility.evaluation.content }}</p>
           <p class="eval-time">{{ formatTime(eligibility.evaluation.createdAt) }}</p>
         </div>
@@ -112,6 +116,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getEvaluationEligibility, getReceivedEvaluation, submitEvaluation } from '@/api/pickup'
 import { getUserAvatar } from '@/api/user'
+import RatingLevelLabel from '@/components/RatingLevelLabel.vue'
+import RatingTag from '@/components/RatingTag.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -129,16 +135,6 @@ const evalForm = reactive({
   content: ''
 })
 
-function getRatingTag(level) {
-  const map = { GOOD: 'success', NEUTRAL: 'info', BAD: 'danger' }
-  return map[level] || 'info'
-}
-
-function getRatingLabel(level) {
-  const map = { GOOD: '好评', NEUTRAL: '中评', BAD: '差评' }
-  return map[level] || level
-}
-
 function formatTime(dateStr) {
   if (!dateStr) return ''
   const d = new Date(dateStr)
@@ -148,6 +144,15 @@ function formatTime(dateStr) {
 
 function goPickupDetail() {
   router.push(`/pickup/${route.params.pickupId}`)
+}
+
+function roleLabel(role) {
+  const map = { PUBLISHER: '发布者', ACCEPTOR: '接单者' }
+  return map[role] || role
+}
+
+function rolePillClass(role) {
+  return role === 'PUBLISHER' ? 'role-pill--publisher' : 'role-pill--acceptor'
 }
 
 // [新增] 不可评价原因映射
@@ -255,13 +260,23 @@ onUnmounted(() => {
 .reviewee-info {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 16px;
+  min-width: 0;
+}
+
+.reviewee-identity {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
 }
 
 .reviewee-text {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+  min-width: 0;
 }
 
 .reviewee-label {
@@ -273,12 +288,49 @@ onUnmounted(() => {
   font-size: 16px;
   font-weight: 500;
   color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role-pill {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 22px;
+  white-space: nowrap;
+}
+
+.role-pill--publisher {
+  background: linear-gradient(135deg, #ff6f9f 0%, #ff9fbd 58%, #ffc0cf 100%);
+}
+
+.role-pill--acceptor {
+  background: linear-gradient(135deg, #4f8cff 0%, #6db7ff 58%, #a5dcff 100%);
+}
+
+.eval-rating-tag {
+  flex: 0 0 auto;
+}
+
+.eval-rating-tag :deep(.rating-level-icon) {
+  width: 18px;
+  height: 18px;
 }
 
 .eval-display {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #ebeef5;
 }
 
 .eval-content {
@@ -286,6 +338,7 @@ onUnmounted(() => {
   font-size: 15px;
   line-height: 1.6;
   margin: 0;
+  word-break: break-word;
 }
 
 .eval-time {

@@ -124,6 +124,14 @@
         </div>
       </div>
     </el-header>
+    <div v-if="showProfilePerspectiveFilter" class="profile-perspective-bar">
+      <span class="profile-perspective-label">视角</span>
+      <el-segmented
+          v-model="profilePerspective"
+          class="profile-perspective-switch"
+          :options="profilePerspectiveOptions"
+      />
+    </div>
     <el-main class="layout-main">
       <router-view :key="$route.fullPath" />
     </el-main>
@@ -167,6 +175,25 @@ let userPopoverTimer = null
 const POINT_STATUS_UPDATED_EVENT = 'campushub:point-status-updated'
 
 const activeMenu = computed(() => route.path)
+const showProfilePerspectiveFilter = computed(() => route.path === '/profile')
+const profilePerspectiveOptions = [
+  { label: '我自己', value: 'self' },
+  { label: '访客', value: 'visitor' }
+]
+const profilePerspective = computed({
+  get() {
+    return route.query.perspective === 'visitor' ? 'visitor' : 'self'
+  },
+  set(value) {
+    const query = { ...route.query }
+    if (value === 'visitor') {
+      query.perspective = 'visitor'
+    } else {
+      delete query.perspective
+    }
+    router.replace({ path: route.path, query })
+  }
+})
 
 const authStatusLabel = computed(() => {
   const map = {
@@ -364,6 +391,7 @@ onUnmounted(() => {
 /* 样式完全不变 */
 .layout-container {
   min-height: 100vh;
+  position: relative;
 }
 
 .layout-header {
@@ -712,6 +740,42 @@ onUnmounted(() => {
   margin: 0 auto;
   width: 100%;
   padding: 20px;
+}
+
+.profile-perspective-bar {
+  position: absolute;
+  top: 84px;
+  right: max(16px, calc((100vw - 1120px) / 2 + 16px));
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.profile-perspective-label {
+  color: #606266;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.profile-perspective-switch {
+  --el-segmented-item-selected-bg-color: #409eff;
+  --el-segmented-item-selected-color: #fff;
+  --el-segmented-bg-color: #f4f7fb;
+  padding: 3px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(37, 48, 78, 0.08);
+}
+
+.profile-perspective-switch :deep(.el-segmented__item) {
+  min-width: 54px;
+  height: 30px;
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+.profile-perspective-switch :deep(.el-segmented__item-selected) {
+  box-shadow: 0 4px 10px rgba(64, 158, 255, 0.18);
 }
 
 :global(.checkin-success-dialog) {

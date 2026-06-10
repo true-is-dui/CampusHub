@@ -99,30 +99,33 @@
       <div class="participants">
         <el-card class="participant-card" shadow="never">
           <div class="participant-main" @click="goUserPublicProfile(detail.publisher?.userId)">
-            <el-avatar :size="48" :src="publisherAvatarUrl" icon="UserFilled" />
-            <div class="participant-info">
-              <el-tag size="small" type="primary">发布者</el-tag>
-              <span class="participant-name clickable">{{ detail.publisher?.nickname || '匿名用户' }}</span>
+            <div class="participant-identity">
+              <el-avatar :size="48" :src="publisherAvatarUrl" icon="UserFilled" />
+              <div class="participant-info">
+                <span class="participant-name clickable">{{ detail.publisher?.nickname || '匿名用户' }}</span>
+                <span class="role-pill role-pill--publisher">发布者</span>
+              </div>
             </div>
+            <RatingTag
+                v-if="getEvaluationByRevieweeRole('PUBLISHER')"
+                :level="getEvaluationByRevieweeRole('PUBLISHER').ratingLevel"
+                size="large"
+                class="eval-rating-tag"
+            />
           </div>
           <div v-if="detail.status === 'COMPLETED'" class="participant-evaluation">
             <template v-if="getEvaluationByRevieweeRole('PUBLISHER')">
-              <div class="eval-header compact">
-                <el-tag :type="getRatingTag(getEvaluationByRevieweeRole('PUBLISHER').ratingLevel)" size="small">
-                  {{ getRatingLabel(getEvaluationByRevieweeRole('PUBLISHER').ratingLevel) }}
-                </el-tag>
-                <span class="eval-time">{{ formatDateTime(getEvaluationByRevieweeRole('PUBLISHER').createdAt) }}</span>
-              </div>
               <p class="eval-content">{{ getEvaluationByRevieweeRole('PUBLISHER').content || '未填写评价内容' }}</p>
+              <p class="eval-time">{{ formatDateTime(getEvaluationByRevieweeRole('PUBLISHER').createdAt) }}</p>
             </template>
             <template v-else-if="shouldShowEvalFormForRole('PUBLISHER')">
               <div class="eval-form-title">评价发布者</div>
               <el-form :model="evalForm" label-width="48px" class="inline-eval-form">
                 <el-form-item label="评分">
                   <el-radio-group v-model="evalForm.ratingLevel">
-                    <el-radio value="GOOD">好评</el-radio>
-                    <el-radio value="NEUTRAL">中评</el-radio>
-                    <el-radio value="BAD">差评</el-radio>
+                    <el-radio value="GOOD"><RatingLevelLabel level="GOOD" /></el-radio>
+                    <el-radio value="NEUTRAL"><RatingLevelLabel level="NEUTRAL" /></el-radio>
+                    <el-radio value="BAD"><RatingLevelLabel level="BAD" /></el-radio>
                   </el-radio-group>
                 </el-form-item>
                 <el-form-item label="评价">
@@ -143,30 +146,33 @@
         </el-card>
         <el-card v-if="detail.acceptor" class="participant-card" shadow="never">
           <div class="participant-main" @click="goUserPublicProfile(detail.acceptor?.userId)">
-            <el-avatar :size="48" :src="acceptorAvatarUrl" icon="UserFilled" />
-            <div class="participant-info">
-              <el-tag size="small" type="success">接单者</el-tag>
-              <span class="participant-name clickable">{{ detail.acceptor?.nickname || '匿名用户' }}</span>
+            <div class="participant-identity">
+              <el-avatar :size="48" :src="acceptorAvatarUrl" icon="UserFilled" />
+              <div class="participant-info">
+                <span class="participant-name clickable">{{ detail.acceptor?.nickname || '匿名用户' }}</span>
+                <span class="role-pill role-pill--acceptor">接单者</span>
+              </div>
             </div>
+            <RatingTag
+                v-if="getEvaluationByRevieweeRole('ACCEPTOR')"
+                :level="getEvaluationByRevieweeRole('ACCEPTOR').ratingLevel"
+                size="large"
+                class="eval-rating-tag"
+            />
           </div>
           <div v-if="detail.status === 'COMPLETED'" class="participant-evaluation">
             <template v-if="getEvaluationByRevieweeRole('ACCEPTOR')">
-              <div class="eval-header compact">
-                <el-tag :type="getRatingTag(getEvaluationByRevieweeRole('ACCEPTOR').ratingLevel)" size="small">
-                  {{ getRatingLabel(getEvaluationByRevieweeRole('ACCEPTOR').ratingLevel) }}
-                </el-tag>
-                <span class="eval-time">{{ formatDateTime(getEvaluationByRevieweeRole('ACCEPTOR').createdAt) }}</span>
-              </div>
               <p class="eval-content">{{ getEvaluationByRevieweeRole('ACCEPTOR').content || '未填写评价内容' }}</p>
+              <p class="eval-time">{{ formatDateTime(getEvaluationByRevieweeRole('ACCEPTOR').createdAt) }}</p>
             </template>
             <template v-else-if="shouldShowEvalFormForRole('ACCEPTOR')">
               <div class="eval-form-title">评价接单者</div>
               <el-form :model="evalForm" label-width="48px" class="inline-eval-form">
                 <el-form-item label="评分">
                   <el-radio-group v-model="evalForm.ratingLevel">
-                    <el-radio value="GOOD">好评</el-radio>
-                    <el-radio value="NEUTRAL">中评</el-radio>
-                    <el-radio value="BAD">差评</el-radio>
+                    <el-radio value="GOOD"><RatingLevelLabel level="GOOD" /></el-radio>
+                    <el-radio value="NEUTRAL"><RatingLevelLabel level="NEUTRAL" /></el-radio>
+                    <el-radio value="BAD"><RatingLevelLabel level="BAD" /></el-radio>
                   </el-radio-group>
                 </el-form-item>
                 <el-form-item label="评价">
@@ -244,6 +250,8 @@ import {
   getEvaluationEligibility
 } from '@/api/pickup'
 import { getUserAvatar } from '@/api/user'
+import RatingLevelLabel from '@/components/RatingLevelLabel.vue'
+import RatingTag from '@/components/RatingTag.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -312,16 +320,6 @@ const isAcceptor = computed(() => {
 
 function goUserPublicProfile(userId) {
   if (userId) router.push(`/user/${userId}`)
-}
-
-function getRatingTag(level) {
-  const map = { GOOD: 'success', NEUTRAL: 'info', BAD: 'danger' }
-  return map[level] || 'info'
-}
-
-function getRatingLabel(level) {
-  const map = { GOOD: '好评', NEUTRAL: '中评', BAD: '差评' }
-  return map[level] || level
 }
 
 function getCurrentUserRole() {
@@ -787,20 +785,33 @@ onMounted(() => {
 .participant-main {
   display: flex;
   align-items: center;
-  gap: 14px;
+  justify-content: space-between;
+  gap: 16px;
   cursor: pointer;
+  min-width: 0;
+}
+
+.participant-identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
 }
 
 .participant-info {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
 }
 
 .participant-name {
   font-size: 15px;
   font-weight: 500;
   color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .participant-name.clickable {
@@ -816,6 +827,37 @@ onMounted(() => {
   border-top: 1px solid #ebeef5;
 }
 
+.role-pill {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 22px;
+  white-space: nowrap;
+}
+
+.role-pill--publisher {
+  background: linear-gradient(135deg, #ff6f9f 0%, #ff9fbd 58%, #ffc0cf 100%);
+}
+
+.role-pill--acceptor {
+  background: linear-gradient(135deg, #4f8cff 0%, #6db7ff 58%, #a5dcff 100%);
+}
+
+.eval-rating-tag {
+  flex: 0 0 auto;
+}
+
+.eval-rating-tag :deep(.rating-level-icon) {
+  width: 18px;
+  height: 18px;
+}
+
 /* 图片卡片 */
 .image-card {
   margin-top: 16px;
@@ -828,28 +870,18 @@ onMounted(() => {
   border: 1px solid #ebeef5;
 }
 
-.eval-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.eval-header.compact {
-  justify-content: space-between;
-}
-
 .eval-content {
   color: #606266;
-  margin: 8px 0 0;
+  margin: 0;
   font-size: 14px;
   line-height: 1.6;
+  word-break: break-word;
 }
 
 .eval-time {
   color: #909399;
   font-size: 13px;
-  margin: 0;
+  margin: 8px 0 0;
 }
 
 .eval-placeholder {

@@ -56,9 +56,7 @@
         <div v-for="evalItem in evaluations" :key="evalItem.evaluationId" class="eval-item">
           <div class="eval-header">
             <div class="eval-title">
-              <el-tag :type="getRatingTag(evalItem.ratingLevel)" size="small">
-                {{ getRatingLabel(evalItem.ratingLevel) }}
-              </el-tag>
+              <RatingTag :level="evalItem.ratingLevel" />
               <span v-if="evalItem.revieweeRoleInBusiness" class="role-text">
                 {{ evalItem.revieweeRoleInBusiness === 'PUBLISHER' ? '作为发布者' : '作为接单者' }}
               </span>
@@ -85,6 +83,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { getUserEvaluations, getUserProfile } from '@/api/user'
 import { useUserStore } from '@/store/user'
+import RatingTag from '@/components/RatingTag.vue'
 
 const userStore = useUserStore()
 const loading = ref(false)
@@ -117,16 +116,6 @@ function formatTime(dateStr) {
   const d = new Date(dateStr)
   const pad = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-}
-
-function getRatingTag(level) {
-  const map = { GOOD: 'success', NEUTRAL: 'info', BAD: 'danger' }
-  return map[level] || 'info'
-}
-
-function getRatingLabel(level) {
-  const map = { GOOD: '好评', NEUTRAL: '中评', BAD: '差评' }
-  return map[level] || level
 }
 
 async function loadSummary() {
