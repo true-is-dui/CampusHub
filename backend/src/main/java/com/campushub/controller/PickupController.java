@@ -7,6 +7,8 @@ import com.campushub.common.PageResult;
 import com.campushub.dto.evaluation.EvaluationCreateRequest;
 import com.campushub.dto.evaluation.EvaluationEligibility;
 import com.campushub.dto.evaluation.EvaluationSubmitResult;
+import com.campushub.dto.evaluation.PickupEvaluationItem;
+import com.campushub.dto.evaluation.ReceivedEvaluationDetail;
 import com.campushub.dto.pickup.CompletionConfirmResult;
 import com.campushub.dto.pickup.PickupAcceptResult;
 import com.campushub.dto.pickup.PickupCancelRequest;
@@ -35,6 +37,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 /**
  * 代取服务接口，实现 {@code api_design.yaml} 的 PickupRequests 分组（{@code /pickup-requests/**}）。
@@ -148,6 +152,15 @@ public class PickupController {
                 evaluationService.submitEvaluation(pickupId, me.getCurrentUserId(), request));
     }
 
+    /** 查询该代取服务下已提交的双方评价列表（仅服务参与者可见：含评价者身份与完整内容）。 */
+    @GetMapping("/{pickupId}/evaluations")
+    public ApiResponse<List<PickupEvaluationItem>> pickupEvaluations(
+            @CurrentUser CurrentUserContext me,
+            @PathVariable Long pickupId) {
+        return ApiResponse.ok(
+                evaluationService.queryPickupEvaluations(pickupId, me.getCurrentUserId()));
+    }
+
     /** 查询当前用户对该代取服务的评价资格（供前端决定是否展示评价入口）。 */
     @GetMapping("/{pickupId}/evaluation-eligibility")
     public ApiResponse<EvaluationEligibility> evaluationEligibility(
@@ -155,6 +168,15 @@ public class PickupController {
             @PathVariable Long pickupId) {
         return ApiResponse.ok(
                 evaluationService.queryEvaluationEligibility(pickupId, me.getCurrentUserId()));
+    }
+
+    /** 查询当前用户在该代取服务中收到的评价（供评价通知跳转展示）。 */
+    @GetMapping("/{pickupId}/received-evaluation")
+    public ApiResponse<ReceivedEvaluationDetail> receivedEvaluation(
+            @CurrentUser CurrentUserContext me,
+            @PathVariable Long pickupId) {
+        return ApiResponse.ok(
+                evaluationService.queryReceivedEvaluation(pickupId, me.getCurrentUserId()));
     }
 
     private ResponseEntity<Resource> imageResponse(StoredFileContent content) {

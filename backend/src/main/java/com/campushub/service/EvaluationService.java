@@ -6,7 +6,11 @@ import com.campushub.dto.evaluation.EvaluationCreateRequest;
 import com.campushub.dto.evaluation.EvaluationEligibility;
 import com.campushub.dto.evaluation.EvaluationHistorySummary;
 import com.campushub.dto.evaluation.EvaluationSubmitResult;
+import com.campushub.dto.evaluation.PickupEvaluationItem;
 import com.campushub.dto.evaluation.RatingSummary;
+import com.campushub.dto.evaluation.ReceivedEvaluationDetail;
+
+import java.util.List;
 
 /**
  * 评价服务（Should 级能力），对应 {@code class_design.md} 的 {@code EvaluationService}：
@@ -44,4 +48,10 @@ public interface EvaluationService {
 
     /** 分页查询用户收到的历史评价总览（按创建时间倒序）。公开访问。 */
     PageResult<EvaluationHistorySummary> queryUserEvaluations(Long userId, PageQuery pageQuery);
+
+    /** 查询当前用户在指定代取服务中收到的评价详情（供评价通知落地页使用）。 */
+    ReceivedEvaluationDetail queryReceivedEvaluation(Long pickupId, Long currentUserId);
+
+    /** 查询指定代取服务下的双方评价列表（仅服务参与者可见，含评价者身份与完整内容）。 */
+    List<PickupEvaluationItem> queryPickupEvaluations(Long pickupId, Long currentUserId);
 }

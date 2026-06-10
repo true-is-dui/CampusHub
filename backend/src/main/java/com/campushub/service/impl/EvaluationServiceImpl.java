@@ -12,8 +12,10 @@ import com.campushub.dto.evaluation.EvaluationEligibility;
 import com.campushub.dto.evaluation.EvaluationEligibilityReason;
 import com.campushub.dto.evaluation.EvaluationHistorySummary;
 import com.campushub.dto.evaluation.EvaluationSubmitResult;
+import com.campushub.dto.evaluation.PickupEvaluationItem;
 import com.campushub.dto.evaluation.RatingRoleSummary;
 import com.campushub.dto.evaluation.RatingSummary;
+import com.campushub.dto.evaluation.ReceivedEvaluationDetail;
 import com.campushub.dto.pickup.UserSummary;
 import com.campushub.entity.Evaluation;
 import com.campushub.entity.enums.BusinessType;
@@ -34,7 +36,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * {@link EvaluationService} 实现。
@@ -163,6 +168,50 @@ public class EvaluationServiceImpl implements EvaluationService {
         return PageResult.of(page, list);
     }
 
+    @Override
+    public ReceivedEvaluationDetail queryReceivedEvaluation(Long pickupId, Long currentUserId) {
+        Evaluation evaluation = evaluationMapper.selectOne(Wrappers.<Evaluation>lambdaQuery()
+                .eq(Evaluation::getBusinessType, BusinessType.PICKUP_REQUEST)
+                .eq(Evaluation::getBusinessId, pickupId)
+                .eq(Evaluation::getRevieweeId, currentUserId));
+        if (evaluation == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, ErrorReason.RESOURCE_NOT_FOUND,
+                    "未找到该代取服务中您收到的评价");
+        }
+        return ReceivedEvaluationDetail.from(evaluation, loadUserSummary(evaluation.getReviewerId()));
+    }
+
+    @Override
+    public List<PickupEvaluationItem> queryPickupEvaluations(Long pickupId, Long currentUserId) {
+        PickupEvaluationContext ctx = pickupService.queryPickupEvaluationContext(pickupId);
+        // 仅服务参与者可见双方互评（含评价者身份与完整内容）：与 submit/eligibility 同一参与者推导范式。
+        if (resolveParticipantRole(ctx, currentUserId) == null) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, ErrorReason.NOT_PICKUP_PARTICIPANT);
+        }
+        List<Evaluation> evaluations = evaluationMapper.selectList(Wrappers.<Evaluation>lambdaQuery()
+                .eq(Evaluation::getBusinessType, BusinessType.PICKUP_REQUEST)
+                .eq(Evaluation::getBusinessId, pickupId)
+                .orderByAsc(Evaluation::getCreatedAt));
+        if (evaluations.isEmpty()) {
+            return List.of();
+        }
+
+        Set<Long> userIds = evaluations.stream()
+                .flatMap(e -> List.of(e.getReviewerId(), e.getRevieweeId()).stream())
+                .collect(Collectors.toSet());
+        Map<Long, UserSummary> userMap = userService.getUserBriefs(List.copyOf(userIds)).stream()
+                .map(EvaluationServiceImpl::toUserSummary)
+                .collect(Collectors.toMap(UserSummary::getUserId, Function.identity()));
+
+        return evaluations.stream()
+                .map(e -> PickupEvaluationItem.from(
+                        e,
+                        userMap.getOrDefault(e.getReviewerId(), fallbackUserSummary(e.getReviewerId())),
+                        userMap.getOrDefault(e.getRevieweeId(), fallbackUserSummary(e.getRevieweeId())),
+                        resolveParticipantRole(ctx, e.getReviewerId())))
+                .toList();
+    }
+
     // ---------------- 私有辅助 ----------------
 
     /** 推导被评价人：当前用户是发布方→接单方；是接单方→发布方；非参与者→null。 */
@@ -196,12 +245,32 @@ public class EvaluationServiceImpl implements EvaluationService {
     }
 
     private UserSummary loadUserSummary(Long userId) {
-        Optional<UserBrief> brief = userService.getUserBriefs(List.of(userId)).stream().findFirst();
-        return brief.map(b -> UserSummary.builder()
-                        .userId(b.getUserId())
-                        .nickname(b.getNickname())
-                        .build())
-                .orElse(UserSummary.builder().userId(userId).build());
+        return userService.getUserBriefs(List.of(userId)).stream().findFirst()
+                .map(EvaluationServiceImpl::toUserSummary)
+                .orElseGet(() -> fallbackUserSummary(userId));
+    }
+
+    /** UserBrief → 评价展示用的 UserSummary（只取 userId/nickname）。 */
+    private static UserSummary toUserSummary(UserBrief brief) {
+        return UserSummary.builder()
+                .userId(brief.getUserId())
+                .nickname(brief.getNickname())
+                .build();
+    }
+
+    /** 查不到用户时的兜底（仅带 userId）。 */
+    private static UserSummary fallbackUserSummary(Long userId) {
+        return UserSummary.builder().userId(userId).build();
+    }
+
+    private PickupParticipantRole resolveParticipantRole(PickupEvaluationContext ctx, Long userId) {
+        if (userId != null && userId.equals(ctx.getPublisherId())) {
+            return PickupParticipantRole.PUBLISHER;
+        }
+        if (userId != null && userId.equals(ctx.getAcceptorId())) {
+            return PickupParticipantRole.ACCEPTOR;
+        }
+        return null;
     }
 
     /** content 归一化：trim 后空串转 null（BAD 必填已由 DTO @AssertTrue 拦截）。 */

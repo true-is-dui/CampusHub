@@ -8,7 +8,9 @@ import com.campushub.dto.evaluation.EvaluationCreateRequest;
 import com.campushub.dto.evaluation.EvaluationEligibility;
 import com.campushub.dto.evaluation.EvaluationEligibilityReason;
 import com.campushub.dto.evaluation.EvaluationSubmitResult;
+import com.campushub.dto.evaluation.PickupEvaluationItem;
 import com.campushub.dto.evaluation.RatingSummary;
+import com.campushub.dto.evaluation.ReceivedEvaluationDetail;
 import com.campushub.entity.Evaluation;
 import com.campushub.entity.enums.BusinessType;
 import com.campushub.entity.enums.NotificationType;
@@ -258,6 +260,87 @@ class EvaluationServiceImplTest {
         assertThat(summary.getPublisherRoleSummary().getTotalCount()).isZero();
         assertThat(summary.getPublisherRoleSummary().getPositiveRate()).isEqualTo(0.0);
         assertThat(summary.getAcceptorRoleSummary().getTotalCount()).isZero();
+    }
+
+    // ---------------- 收到的评价详情 ----------------
+
+    @Test
+    void receivedEvaluation_returnsEvaluationForCurrentReviewee() {
+        Evaluation received = new Evaluation();
+        received.setId(12L);
+        received.setBusinessType(BusinessType.PICKUP_REQUEST);
+        received.setBusinessId(5L);
+        received.setReviewerId(8L);
+        received.setRevieweeId(7L);
+        received.setRevieweeRole(PickupParticipantRole.PUBLISHER);
+        received.setRatingLevel(RatingLevel.GOOD);
+        received.setContent("沟通很清楚");
+        when(evaluationMapper.selectOne(any())).thenReturn(received);
+        when(userService.getUserBriefs(any())).thenReturn(List.of(
+                UserBrief.builder().userId(8L).username("acc").nickname("接单侠").build()));
+
+        ReceivedEvaluationDetail result = evaluationService.queryReceivedEvaluation(5L, 7L);
+
+        assertThat(result.getEvaluationId()).isEqualTo(12L);
+        assertThat(result.getReviewer().getUserId()).isEqualTo(8L);
+        assertThat(result.getReviewer().getNickname()).isEqualTo("接单侠");
+        assertThat(result.getRevieweeRoleInBusiness()).isEqualTo(PickupParticipantRole.PUBLISHER);
+        assertThat(result.getRatingLevel()).isEqualTo(RatingLevel.GOOD);
+        assertThat(result.getContent()).isEqualTo("沟通很清楚");
+    }
+
+    @Test
+    void receivedEvaluation_missing_throws404() {
+        when(evaluationMapper.selectOne(any())).thenReturn(null);
+
+        assertThatThrownBy(() -> evaluationService.queryReceivedEvaluation(5L, 7L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.NOT_FOUND);
+    }
+
+    @Test
+    void pickupEvaluations_returnsBothSidesWithRoles() {
+        Evaluation publisherRatesAcceptor = new Evaluation();
+        publisherRatesAcceptor.setId(12L);
+        publisherRatesAcceptor.setReviewerId(7L);
+        publisherRatesAcceptor.setRevieweeId(8L);
+        publisherRatesAcceptor.setRevieweeRole(PickupParticipantRole.ACCEPTOR);
+        publisherRatesAcceptor.setRatingLevel(RatingLevel.GOOD);
+        publisherRatesAcceptor.setContent("很快");
+
+        Evaluation acceptorRatesPublisher = new Evaluation();
+        acceptorRatesPublisher.setId(13L);
+        acceptorRatesPublisher.setReviewerId(8L);
+        acceptorRatesPublisher.setRevieweeId(7L);
+        acceptorRatesPublisher.setRevieweeRole(PickupParticipantRole.PUBLISHER);
+        acceptorRatesPublisher.setRatingLevel(RatingLevel.NEUTRAL);
+        acceptorRatesPublisher.setContent("沟通正常");
+
+        when(pickupService.queryPickupEvaluationContext(5L)).thenReturn(completedCtx());
+        when(evaluationMapper.selectList(any())).thenReturn(List.of(publisherRatesAcceptor, acceptorRatesPublisher));
+        when(userService.getUserBriefs(any())).thenReturn(List.of(
+                UserBrief.builder().userId(7L).username("pub").nickname("发布侠").build(),
+                UserBrief.builder().userId(8L).username("acc").nickname("接单侠").build()));
+
+        List<PickupEvaluationItem> result = evaluationService.queryPickupEvaluations(5L, 7L);
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).getReviewer().getNickname()).isEqualTo("发布侠");
+        assertThat(result.get(0).getReviewerRoleInBusiness()).isEqualTo(PickupParticipantRole.PUBLISHER);
+        assertThat(result.get(0).getReviewee().getNickname()).isEqualTo("接单侠");
+        assertThat(result.get(0).getRevieweeRoleInBusiness()).isEqualTo(PickupParticipantRole.ACCEPTOR);
+        assertThat(result.get(1).getReviewerRoleInBusiness()).isEqualTo(PickupParticipantRole.ACCEPTOR);
+        assertThat(result.get(1).getRevieweeRoleInBusiness()).isEqualTo(PickupParticipantRole.PUBLISHER);
+    }
+
+    @Test
+    void pickupEvaluations_nonParticipant_throws403() {
+        when(pickupService.queryPickupEvaluationContext(5L)).thenReturn(completedCtx());
+
+        // 当前用户既非发布方(7) 也非接单方(8)，不得查看含评价者身份与全文的双方互评。
+        assertThatThrownBy(() -> evaluationService.queryPickupEvaluations(5L, 99L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.FORBIDDEN);
     }
 
     private Evaluation eval(PickupParticipantRole role, RatingLevel level) {

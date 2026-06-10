@@ -2,11 +2,16 @@ package com.campushub.controller;
 
 import com.campushub.common.CurrentUserContext;
 import com.campushub.common.PageResult;
+import com.campushub.dto.evaluation.PickupEvaluationItem;
+import com.campushub.dto.evaluation.ReceivedEvaluationDetail;
 import com.campushub.dto.pickup.PickupCancelResult;
 import com.campushub.dto.pickup.PickupRequestSummary;
+import com.campushub.dto.pickup.UserSummary;
 import com.campushub.entity.enums.AuthStatus;
 import com.campushub.entity.enums.PickupCancelReason;
+import com.campushub.entity.enums.PickupParticipantRole;
 import com.campushub.entity.enums.PickupStatus;
+import com.campushub.entity.enums.RatingLevel;
 import com.campushub.entity.enums.UserRole;
 import com.campushub.security.JwtUtil;
 import com.campushub.service.PickupService;
@@ -130,5 +135,56 @@ class PickupModuleWebTest {
         mockMvc.perform(get("/pickup-requests/5/evaluation-eligibility"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(40101));
+    }
+
+    @Test
+    void pickupEvaluations_requiresAuth_401WithoutToken() throws Exception {
+        mockMvc.perform(get("/pickup-requests/5/evaluations"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(40101));
+    }
+
+    @Test
+    void pickupEvaluations_returnsList_whenAuthenticated() throws Exception {
+        when(evaluationService.queryPickupEvaluations(5L, 7L))
+                .thenReturn(List.of(PickupEvaluationItem.builder()
+                        .evaluationId(12L)
+                        .reviewer(UserSummary.builder().userId(7L).nickname("发布侠").build())
+                        .reviewerRoleInBusiness(PickupParticipantRole.PUBLISHER)
+                        .reviewee(UserSummary.builder().userId(8L).nickname("接单侠").build())
+                        .revieweeRoleInBusiness(PickupParticipantRole.ACCEPTOR)
+                        .ratingLevel(RatingLevel.GOOD)
+                        .content("很快")
+                        .build()));
+
+        mockMvc.perform(get("/pickup-requests/5/evaluations")
+                        .header("Authorization", "Bearer VALID"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data[0].evaluationId").value(12))
+                .andExpect(jsonPath("$.data[0].reviewer.nickname").value("发布侠"))
+                .andExpect(jsonPath("$.data[0].reviewee.nickname").value("接单侠"))
+                .andExpect(jsonPath("$.data[0].ratingLevel").value("GOOD"));
+    }
+
+    @Test
+    void receivedEvaluation_returnsCurrentUsersReceivedEvaluation() throws Exception {
+        when(evaluationService.queryReceivedEvaluation(5L, 7L))
+                .thenReturn(ReceivedEvaluationDetail.builder()
+                        .evaluationId(12L)
+                        .reviewer(UserSummary.builder().userId(8L).nickname("接单侠").build())
+                        .revieweeRoleInBusiness(PickupParticipantRole.PUBLISHER)
+                        .ratingLevel(RatingLevel.GOOD)
+                        .content("沟通很清楚")
+                        .build());
+
+        mockMvc.perform(get("/pickup-requests/5/received-evaluation")
+                        .header("Authorization", "Bearer VALID"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.evaluationId").value(12))
+                .andExpect(jsonPath("$.data.reviewer.userId").value(8))
+                .andExpect(jsonPath("$.data.ratingLevel").value("GOOD"))
+                .andExpect(jsonPath("$.data.content").value("沟通很清楚"));
     }
 }
