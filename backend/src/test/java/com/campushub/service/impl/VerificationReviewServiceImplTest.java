@@ -1,9 +1,13 @@
 package com.campushub.service.impl;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.campushub.common.BusinessException;
 import com.campushub.common.CurrentUserContext;
+import com.campushub.common.PageQuery;
+import com.campushub.common.PageResult;
 import com.campushub.dto.user.AdminHandleRequest;
 import com.campushub.dto.user.AdminHandleResult;
+import com.campushub.dto.user.VerificationReviewSummary;
 import com.campushub.dto.user.VerificationSubmitResponse;
 import com.campushub.entity.VerificationReview;
 import com.campushub.entity.enums.AuthStatus;
@@ -16,9 +20,12 @@ import com.campushub.mapper.VerificationReviewMapper;
 import com.campushub.service.FileStorageService;
 import com.campushub.service.NotificationService;
 import com.campushub.service.UserService;
+import com.campushub.service.dto.UserBrief;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.mock.web.MockMultipartFile;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -123,6 +130,29 @@ class VerificationReviewServiceImplTest {
         assertThatThrownBy(() -> service.queryReviews(
                 new CurrentUserContext(7L, UserRole.USER, AuthStatus.APPROVED), null, new com.campushub.common.PageQuery()))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void queryReviews_returnsFullStudentIdForAdminReviewList() {
+        VerificationReview review = pendingReview();
+        Page<VerificationReview> page = Page.of(1, 20);
+        page.setRecords(List.of(review));
+        page.setTotal(1);
+        when(reviewMapper.selectPage(any(), any())).thenReturn(page);
+        when(userService.getUserBriefs(List.of(7L))).thenReturn(List.of(UserBrief.builder()
+                .userId(7L)
+                .username("student7")
+                .nickname("同学7")
+                .build()));
+
+        PageResult<VerificationReviewSummary> result =
+                service.queryReviews(admin(), ReviewStatus.PENDING, new PageQuery());
+
+        assertThat(result.getList()).hasSize(1);
+        VerificationReviewSummary summary = result.getList().get(0);
+        assertThat(summary.getStudentId()).isEqualTo("20260001");
+        assertThat(summary.getUsername()).isEqualTo("student7");
+        assertThat(summary.getRealName()).isEqualTo("张三");
     }
 
     private CurrentUserContext admin() {

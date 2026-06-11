@@ -26,7 +26,6 @@ import com.campushub.service.UserService;
 import com.campushub.service.VerificationReviewService;
 import com.campushub.service.dto.StoredFileContent;
 import com.campushub.service.dto.UserBrief;
-import com.campushub.util.StudentIdMasker;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -189,7 +188,7 @@ public class VerificationReviewServiceImpl implements VerificationReviewService 
                 .userId(review.getUserId())
                 .username(user == null ? null : user.getUsername())
                 .nickname(user == null ? null : user.getNickname())
-                .studentIdMasked(StudentIdMasker.mask(review.getSubmittedStudentId()))
+                .studentId(review.getSubmittedStudentId())
                 .realName(review.getSubmittedRealName())
                 .status(review.getStatus())
                 .rejectReason(review.getRejectReason())
