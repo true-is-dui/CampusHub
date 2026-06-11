@@ -11,209 +11,300 @@
           v-if="userInfo?.userId"
           :user-id="userInfo.userId"
           :auth-status="userInfo.authStatus"
+          :role="userInfo.role"
       />
     </template>
 
     <template v-else>
-      <template v-if="!isEditing">
-        <div class="profile-dashboard-grid">
-          <el-card class="profile-section-card identity-card" shadow="never">
-            <div class="identity-shell">
-              <div class="identity-content">
-                <el-avatar :size="104" :src="userStore.avatarUrl" icon="UserFilled" class="profile-avatar" />
-                <div class="identity-text">
-                  <div class="identity-name">{{ userInfo?.nickname || '未设置' }}</div>
-                  <div class="identity-username">
-                    <span>用户名</span>
-                    <strong>{{ userInfo?.username }}</strong>
-                  </div>
-                  <el-tag v-if="userInfo?.role === 'ADMIN'" type="danger" size="small">管理员</el-tag>
-                </div>
-              </div>
-              <div class="identity-tip">{{ identityGreeting }}</div>
-            </div>
-          </el-card>
-
-          <el-card class="profile-section-card points-card" shadow="never" @click="$router.push('/points')">
-            <div class="points-shell">
-              <div class="points-content">
-                <span class="points-icon" aria-hidden="true">
-                  <el-icon><Money /></el-icon>
-                </span>
-                <div class="points-copy">
-                  <span class="points-title">积分余额</span>
-                  <div class="point-value">{{ pointBalance }}</div>
-                </div>
-              </div>
-              <div class="points-tip">{{ pointsTip }}</div>
-            </div>
-          </el-card>
-
-          <el-card class="profile-section-card public-info-card" shadow="never">
-            <button class="public-edit-badge" type="button" aria-label="编辑公开资料" @click="toggleEdit">
-              <el-icon><EditPen /></el-icon>
-              <span>编辑</span>
-            </button>
-            <div class="public-info-shell">
-              <div class="public-info-content">
-                <span class="public-info-icon" aria-hidden="true">
-                  <el-icon><Postcard /></el-icon>
-                </span>
-                <div class="public-info-copy">
-                  <div class="public-info-list">
-                    <div class="info-item public-info-row">
-                      <span class="info-label">昵称</span>
-                      <span class="info-value">{{ userInfo?.nickname || '未设置' }}</span>
-                    </div>
-                    <div class="info-item public-info-row">
-                      <span class="info-label">学院</span>
-                      <span class="info-value">{{ userInfo?.college || '未设置' }}</span>
-                    </div>
-                    <div class="info-item public-info-row">
-                      <span class="info-label">联系方式</span>
-                      <span class="info-value">{{ userInfo?.contact || '未设置' }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div class="public-tip">这些信息会在访客视角和公开主页中展示。</div>
-            </div>
-          </el-card>
-
-          <el-card class="profile-section-card auth-card" shadow="never">
-            <button
-                class="auth-verify-badge"
-                type="button"
-                :disabled="!canStartVerification"
-                aria-label="去认证"
-                @click="$router.push('/verification')"
-            >
-              <el-icon><Stamp /></el-icon>
-              <span>去认证</span>
-            </button>
-            <div class="auth-info-shell">
-              <div class="auth-info-content">
-                <span class="auth-info-icon" aria-hidden="true">
-                  <el-icon><UserFilled /></el-icon>
-                </span>
-                <div class="auth-info-copy">
-                  <div class="auth-info-list">
-                    <div class="info-item auth-info-row">
-                      <span class="info-label">状态</span>
-                      <span :class="['auth-status-pill', authStatusClass]">{{ authStatusLabel }}</span>
-                    </div>
-                    <div class="info-item auth-info-row">
-                      <span class="info-label">姓名</span>
-                      <span class="info-value">{{ authRealNameDisplay }}</span>
-                    </div>
-                    <div class="info-item auth-info-row">
-                      <span class="info-label">学号</span>
-                      <span class="info-value">{{ authStudentIdDisplay }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div class="auth-tip">认证通过才可参与互助，这些信息不会对外展示。</div>
-            </div>
-          </el-card>
-
-          <div class="overview-item overview-item-publisher" @click="$router.push('/my-evaluations')">
-            <div class="overview-topline">
-              <span class="overview-label">作为发布方</span>
-              <span class="overview-badge">
-                <span class="thumb-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" focusable="false">
-                    <path d="M7 21H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3v11Zm2 0V10.7l4.4-7.1c.4-.6 1.2-.8 1.8-.5 1.2.6 1.6 2 1.1 3.2L15 10h4.6c1.4 0 2.5 1.2 2.4 2.6l-.7 5.7A3 3 0 0 1 18.4 21H9Z" />
-                  </svg>
-                </span>
-                <span>好评</span>
-              </span>
-            </div>
-            <div class="overview-rate-block">
-              <span class="rate-label">好评率</span>
-              <div class="rate-number-row">
-                <strong>{{ formatRateNumber(publisherSummary.positiveRate) }}</strong>
-                <span v-if="publisherSummary.positiveRate != null" class="rate-percent">%</span>
-              </div>
-            </div>
-            <div class="overview-total">共收到 {{ publisherSummary.totalCount }} 条历史评价</div>
-          </div>
-
-          <div class="overview-item overview-item-acceptor" @click="$router.push('/my-evaluations')">
-            <div class="overview-topline">
-              <span class="overview-label">作为接单方</span>
-              <span class="overview-badge">
-                <span class="thumb-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" focusable="false">
-                    <path d="M7 21H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3v11Zm2 0V10.7l4.4-7.1c.4-.6 1.2-.8 1.8-.5 1.2.6 1.6 2 1.1 3.2L15 10h4.6c1.4 0 2.5 1.2 2.4 2.6l-.7 5.7A3 3 0 0 1 18.4 21H9Z" />
-                  </svg>
-                </span>
-                <span>好评</span>
-              </span>
-            </div>
-            <div class="overview-rate-block">
-              <span class="rate-label">好评率</span>
-              <div class="rate-number-row">
-                <strong>{{ formatRateNumber(acceptorSummary.positiveRate) }}</strong>
-                <span v-if="acceptorSummary.positiveRate != null" class="rate-percent">%</span>
-              </div>
-            </div>
-            <div class="overview-total">共收到 {{ acceptorSummary.totalCount }} 条历史评价</div>
-          </div>
-        </div>
-      </template>
-
-      <template v-else>
-        <el-card class="info-card" shadow="never">
-          <template #header><span>编辑资料</span></template>
-          <el-form
-              ref="editFormRef"
-              :model="editForm"
-              :rules="editRules"
-              label-width="80px"
-              style="max-width: 500px"
-          >
-            <el-form-item label="头像">
-              <el-upload
-                  ref="avatarUploadRef"
-                  :auto-upload="false"
-                  :limit="1"
+      <div class="profile-dashboard-grid">
+        <el-card class="profile-section-card identity-card" shadow="never">
+          <div class="identity-shell">
+            <div class="identity-content">
+              <el-dropdown trigger="click" @command="handleAvatarCommand">
+                <button
+                    class="avatar-action-trigger"
+                    type="button"
+                    :disabled="avatarSaving"
+                    aria-label="头像操作"
+                >
+                  <el-avatar :size="104" :src="userStore.avatarUrl" icon="UserFilled" class="profile-avatar" />
+                  <span v-if="avatarSaving" class="avatar-saving-mask">上传中</span>
+                </button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="view">查看头像</el-dropdown-item>
+                    <el-dropdown-item command="change" :disabled="avatarSaving">修改头像</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+              <input
+                  ref="avatarInputRef"
+                  class="avatar-file-input"
+                  type="file"
                   accept="image/jpeg,image/png"
-                  list-type="picture-card"
-                  :on-change="onAvatarChange"
-                  :on-remove="onAvatarRemove"
-                  :file-list="avatarFileList"
+                  @change="handleAvatarPicked"
               >
-                <el-icon v-if="avatarFileList.length === 0"><Plus /></el-icon>
-              </el-upload>
-              <div class="upload-tip">JPG/PNG，不超过5MB，最多上传一张</div>
-            </el-form-item>
-            <el-form-item label="昵称" prop="nickname">
-              <el-input v-model="editForm.nickname" placeholder="请输入昵称（1-20字符）" maxlength="20" show-word-limit />
-            </el-form-item>
-            <el-form-item label="学院" prop="college">
-              <el-input v-model="editForm.college" placeholder="请输入学院（最多50字符）" maxlength="50" show-word-limit />
-            </el-form-item>
-            <el-form-item label="联系方式" prop="contact">
-              <el-input v-model="editForm.contact" placeholder="请输入联系方式（最多100字符）" maxlength="100" show-word-limit />
-            </el-form-item>
-          </el-form>
+              <div class="identity-text">
+                <div class="identity-name">{{ userInfo?.nickname || '未设置' }}</div>
+                <div class="identity-username">
+                  <span>用户名</span>
+                  <strong>{{ userInfo?.username }}</strong>
+                </div>
+                <el-tag v-if="userInfo?.role === 'ADMIN'" class="admin-role-tag" size="small">管理员</el-tag>
+              </div>
+            </div>
+            <div class="identity-tip">{{ identityGreeting }}</div>
+          </div>
         </el-card>
-        <div class="edit-actions">
-          <el-button size="large" @click="isEditing = false">取消</el-button>
-          <el-button type="primary" size="large" :loading="saving" @click="handleSave">保存</el-button>
+
+        <el-card class="profile-section-card points-card" shadow="never" @click="$router.push('/points')">
+          <div class="points-shell">
+            <div class="points-content">
+              <span class="points-icon" aria-hidden="true">
+                <el-icon><Money /></el-icon>
+              </span>
+              <div class="points-copy">
+                <span class="points-title">积分余额</span>
+                <div class="point-value">{{ pointBalance }}</div>
+              </div>
+            </div>
+            <div class="points-tip">{{ pointsTip }}</div>
+          </div>
+        </el-card>
+
+        <el-card class="profile-section-card public-info-card" shadow="never">
+          <button class="public-edit-badge" type="button" aria-label="编辑公开资料" @click="openProfileEditor">
+            <el-icon><EditPen /></el-icon>
+            <span>编辑</span>
+          </button>
+          <div class="public-info-shell">
+            <div class="public-info-content">
+              <span class="public-info-icon" aria-hidden="true">
+                <el-icon><Postcard /></el-icon>
+              </span>
+              <div class="public-info-copy">
+                <div class="public-info-list">
+                  <div class="info-item public-info-row">
+                    <span class="info-label">昵称</span>
+                    <span class="info-value">{{ userInfo?.nickname || '未设置' }}</span>
+                  </div>
+                  <div class="info-item public-info-row">
+                    <span class="info-label">学院</span>
+                    <span class="info-value">{{ userInfo?.college || '未设置' }}</span>
+                  </div>
+                  <div class="info-item public-info-row">
+                    <span class="info-label">联系方式</span>
+                    <span class="info-value">{{ userInfo?.contact || '未设置' }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="public-tip">这些信息会在访客视角和公开主页中展示。</div>
+          </div>
+        </el-card>
+
+        <el-card class="profile-section-card auth-card" shadow="never">
+          <button
+              class="auth-verify-badge"
+              type="button"
+              :disabled="!canStartVerification"
+              aria-label="去认证"
+              @click="openVerificationDialog"
+          >
+            <el-icon><Stamp /></el-icon>
+            <span>去认证</span>
+          </button>
+          <div class="auth-info-shell">
+            <div class="auth-info-content">
+              <span class="auth-info-icon" aria-hidden="true">
+                <el-icon><UserFilled /></el-icon>
+              </span>
+              <div class="auth-info-copy">
+                <div class="auth-info-list">
+                  <div class="info-item auth-info-row">
+                    <span class="info-label">状态</span>
+                    <span :class="['auth-status-pill', authStatusClass]">{{ authStatusLabel }}</span>
+                  </div>
+                  <div class="info-item auth-info-row">
+                    <span class="info-label">姓名</span>
+                    <span class="info-value">{{ authRealNameDisplay }}</span>
+                  </div>
+                  <div class="info-item auth-info-row">
+                    <span class="info-label">学号</span>
+                    <span class="info-value">{{ authStudentIdDisplay }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="auth-tip">认证通过才可参与互助，这些信息不会对外展示。</div>
+          </div>
+        </el-card>
+
+        <div class="overview-item overview-item-publisher" @click="$router.push('/my-evaluations')">
+          <div class="overview-topline">
+            <span class="overview-label">作为发布方</span>
+            <span class="overview-badge">
+              <span class="thumb-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M7 21H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3v11Zm2 0V10.7l4.4-7.1c.4-.6 1.2-.8 1.8-.5 1.2.6 1.6 2 1.1 3.2L15 10h4.6c1.4 0 2.5 1.2 2.4 2.6l-.7 5.7A3 3 0 0 1 18.4 21H9Z" />
+                </svg>
+              </span>
+              <span>好评</span>
+            </span>
+          </div>
+          <div class="overview-rate-block">
+            <span class="rate-label">好评率</span>
+            <div class="rate-number-row">
+              <strong>{{ formatRateNumber(publisherSummary.positiveRate) }}</strong>
+              <span v-if="publisherSummary.positiveRate != null" class="rate-percent">%</span>
+            </div>
+          </div>
+          <div class="overview-total">共收到 {{ publisherSummary.totalCount }} 条历史评价</div>
         </div>
-      </template>
+
+        <div class="overview-item overview-item-acceptor" @click="$router.push('/my-evaluations')">
+          <div class="overview-topline">
+            <span class="overview-label">作为接单方</span>
+            <span class="overview-badge">
+              <span class="thumb-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path d="M7 21H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3v11Zm2 0V10.7l4.4-7.1c.4-.6 1.2-.8 1.8-.5 1.2.6 1.6 2 1.1 3.2L15 10h4.6c1.4 0 2.5 1.2 2.4 2.6l-.7 5.7A3 3 0 0 1 18.4 21H9Z" />
+                </svg>
+              </span>
+              <span>好评</span>
+            </span>
+          </div>
+          <div class="overview-rate-block">
+            <span class="rate-label">好评率</span>
+            <div class="rate-number-row">
+              <strong>{{ formatRateNumber(acceptorSummary.positiveRate) }}</strong>
+              <span v-if="acceptorSummary.positiveRate != null" class="rate-percent">%</span>
+            </div>
+          </div>
+          <div class="overview-total">共收到 {{ acceptorSummary.totalCount }} 条历史评价</div>
+        </div>
+      </div>
+
+      <el-dialog
+          v-model="isEditing"
+          class="profile-edit-dialog"
+          title="编辑资料"
+          width="min(560px, calc(100vw - 32px))"
+          :close-on-click-modal="!saving"
+          :close-on-press-escape="!saving"
+          :show-close="!saving"
+          @closed="handleEditClosed"
+      >
+        <el-form
+            ref="editFormRef"
+            :model="editForm"
+            :rules="editRules"
+            class="profile-edit-form"
+            label-width="80px"
+        >
+          <el-form-item label="昵称" prop="nickname">
+            <el-input v-model="editForm.nickname" placeholder="请输入昵称（1-20字符）" maxlength="20" show-word-limit />
+          </el-form-item>
+          <el-form-item label="学院" prop="college">
+            <el-input v-model="editForm.college" placeholder="请输入学院（最多50字符）" maxlength="50" show-word-limit />
+          </el-form-item>
+          <el-form-item label="联系方式" prop="contact">
+            <el-input v-model="editForm.contact" placeholder="请输入联系方式（最多100字符）" maxlength="100" show-word-limit />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <div class="edit-dialog-actions">
+            <el-button size="large" :disabled="saving" @click="isEditing = false">取消</el-button>
+            <el-button type="primary" size="large" :loading="saving" @click="handleSave">保存</el-button>
+          </div>
+        </template>
+      </el-dialog>
+
+      <el-dialog
+          v-model="verificationVisible"
+          class="verification-dialog"
+          title="实名认证"
+          width="min(600px, calc(100vw - 32px))"
+          :close-on-click-modal="!verificationSubmitting"
+          :close-on-press-escape="!verificationSubmitting"
+          :show-close="!verificationSubmitting"
+          @closed="handleVerificationClosed"
+      >
+        <el-form
+            ref="verificationFormRef"
+            :model="verificationForm"
+            :rules="verificationRules"
+            class="verification-form"
+            label-width="100px"
+        >
+          <el-form-item label="真实姓名" prop="realName">
+            <el-input v-model="verificationForm.realName" placeholder="请输入真实姓名（2-20字符）" maxlength="20" show-word-limit />
+          </el-form-item>
+          <el-form-item label="学号" prop="studentId">
+            <el-input v-model="verificationForm.studentId" placeholder="请输入学号（6-20位数字）" maxlength="20" show-word-limit />
+          </el-form-item>
+          <el-form-item label="认证图片" prop="verificationImage" required>
+            <el-upload
+                ref="verificationUploadRef"
+                :class="{ 'verification-upload--filled': verificationFileList.length > 0 }"
+                :auto-upload="false"
+                :limit="1"
+                accept="image/jpeg,image/png"
+                list-type="picture-card"
+                :file-list="verificationFileList"
+                :on-change="handleVerificationFileChange"
+                :on-remove="handleVerificationFileRemove"
+            >
+              <el-icon v-if="verificationFileList.length === 0"><Plus /></el-icon>
+            </el-upload>
+            <div class="verification-upload-tip">请上传学生证或校园卡照片，JPG/PNG，不超过5MB，最多上传一张</div>
+          </el-form-item>
+        </el-form>
+
+        <template #footer>
+          <div class="verification-dialog-actions">
+            <el-button size="large" :disabled="verificationSubmitting" @click="verificationVisible = false">取消</el-button>
+            <el-button
+                type="primary"
+                size="large"
+                :loading="verificationSubmitting"
+                @click="handleVerificationSubmit"
+            >
+              {{ userInfo?.authStatus === 'REJECTED' ? '重新提交' : '提交认证' }}
+            </el-button>
+          </div>
+        </template>
+      </el-dialog>
+
+      <el-dialog
+          v-model="avatarPreviewVisible"
+          class="avatar-preview-dialog"
+          title="查看头像"
+          width="min(420px, calc(100vw - 32px))"
+          :close-on-click-modal="true"
+          :close-on-press-escape="true"
+      >
+        <div class="avatar-preview-body" @click="avatarPreviewVisible = false">
+          <img
+              v-if="userStore.avatarUrl"
+              class="avatar-preview-image"
+              :src="userStore.avatarUrl"
+              alt="当前头像"
+              @click.stop
+          >
+          <el-empty v-else description="暂无头像" @click.stop />
+        </div>
+      </el-dialog>
     </template>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/store/user'
-import { getUserProfile, updateProfile } from '@/api/user'
+import { getUserProfile, submitVerification, updateProfile } from '@/api/user'
 import { getPointBalance } from '@/api/points'
 import UserPublicProfilePanel from './UserPublicProfilePanel.vue'
 
@@ -221,10 +312,16 @@ const route = useRoute()
 const userStore = useUserStore()
 const isEditing = ref(false)
 const saving = ref(false)
+const avatarSaving = ref(false)
+const avatarPreviewVisible = ref(false)
+const verificationVisible = ref(false)
+const verificationSubmitting = ref(false)
 const editFormRef = ref(null)
-const avatarUploadRef = ref(null)
-const avatarFile = ref(null)
-const avatarFileList = ref([])
+const avatarInputRef = ref(null)
+const verificationFormRef = ref(null)
+const verificationUploadRef = ref(null)
+const verificationImageFile = ref(null)
+const verificationFileList = ref([])
 const pointBalance = ref(0)
 const ratingSummary = ref(null)
 
@@ -259,6 +356,7 @@ const identityGreeting = computed(() => {
 watch(profilePerspective, (value) => {
   if (value === 'visitor') {
     isEditing.value = false
+    verificationVisible.value = false
   }
 })
 
@@ -269,13 +367,18 @@ const authStatusMap = {
   REJECTED: '认证失败'
 }
 
-const authStatusLabel = computed(() => authStatusMap[userInfo.value?.authStatus] || '未知')
-const canStartVerification = computed(() => userInfo.value?.authStatus === 'UNVERIFIED')
+const authStatusLabel = computed(() => {
+  if (userInfo.value?.role === 'ADMIN') return '管理员'
+  return authStatusMap[userInfo.value?.authStatus] || '未知'
+})
+const canSubmitVerification = computed(() => ['UNVERIFIED', 'REJECTED'].includes(userInfo.value?.authStatus))
+const canStartVerification = computed(() => canSubmitVerification.value)
 const isVerificationReviewing = computed(() => userInfo.value?.authStatus === 'REVIEWING')
 const authRealNameDisplay = computed(() => isVerificationReviewing.value ? '**' : (userInfo.value?.realName || '未认证'))
 const authStudentIdDisplay = computed(() => isVerificationReviewing.value ? '********' : (userInfo.value?.studentIdMasked || '未认证'))
 
 const authStatusClass = computed(() => {
+  if (userInfo.value?.role === 'ADMIN') return 'auth-status-pill--approved'
   const map = {
     UNVERIFIED: 'auth-status-pill--unverified',
     REVIEWING: 'auth-status-pill--reviewing',
@@ -315,11 +418,37 @@ const editRules = {
   ]
 }
 
-function toggleEdit() {
-  if (isEditing.value) {
-    isEditing.value = false
-    return
-  }
+const verificationForm = reactive({
+  realName: '',
+  studentId: '',
+  verificationImage: null
+})
+
+const verificationRules = {
+  realName: [
+    { required: true, message: '请输入真实姓名', trigger: 'blur' },
+    { min: 2, max: 20, message: '真实姓名长度为2-20个字符', trigger: 'blur' }
+  ],
+  studentId: [
+    { required: true, message: '请输入学号', trigger: 'blur' },
+    { min: 6, max: 20, message: '学号长度为6-20位', trigger: 'blur' },
+    { pattern: /^\d+$/, message: '学号只能包含数字', trigger: 'blur' }
+  ],
+  verificationImage: [
+    {
+      validator: (rule, value, callback) => {
+        if (!verificationForm.verificationImage) {
+          callback(new Error('请上传认证图片'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'change'
+    }
+  ]
+}
+
+function openProfileEditor() {
   const cur = userInfo.value || {}
   editForm.nickname = cur.nickname || ''
   editForm.college = cur.college || ''
@@ -328,25 +457,144 @@ function toggleEdit() {
   original.nickname = editForm.nickname
   original.college = cur.college  // 可能为 null
   original.contact = cur.contact  // 可能为 null
-  avatarFile.value = null
-  avatarFileList.value = []
   isEditing.value = true
+  nextTick(() => {
+    editFormRef.value?.clearValidate()
+  })
 }
 
-function onAvatarChange(file) {
-  if (file.raw && file.raw.size > 5 * 1024 * 1024) {
-    ElMessage.error('头像图片不能超过5MB')
-    const index = avatarFileList.value.findIndex(f => f.uid === file.uid)
-    if (index !== -1) {
-      avatarFileList.value.splice(index, 1)
-    }
+function handleEditClosed() {
+  if (saving.value) return
+  editFormRef.value?.clearValidate()
+}
+
+function openVerificationDialog() {
+  if (!canStartVerification.value) return
+  verificationForm.realName = userInfo.value?.realName || ''
+  verificationForm.studentId = userInfo.value?.studentId || ''
+  verificationForm.verificationImage = null
+  verificationImageFile.value = null
+  verificationFileList.value = []
+  verificationVisible.value = true
+  nextTick(() => {
+    verificationFormRef.value?.clearValidate()
+    verificationUploadRef.value?.clearFiles()
+  })
+}
+
+function handleVerificationClosed() {
+  if (verificationSubmitting.value) return
+  verificationForm.realName = ''
+  verificationForm.studentId = ''
+  verificationForm.verificationImage = null
+  verificationImageFile.value = null
+  verificationFileList.value = []
+  verificationFormRef.value?.clearValidate()
+  verificationUploadRef.value?.clearFiles()
+}
+
+function handleAvatarCommand(command) {
+  if (command === 'view') {
+    avatarPreviewVisible.value = true
     return
   }
-  avatarFile.value = file.raw
+
+  if (command === 'change') {
+    avatarInputRef.value?.click()
+  }
 }
 
-function onAvatarRemove() {
-  avatarFile.value = null
+function validateAvatarFile(file) {
+  if (!['image/jpeg', 'image/png'].includes(file.type)) {
+    ElMessage.error('头像仅支持 JPG/PNG 格式')
+    return false
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    ElMessage.error('头像图片不能超过5MB')
+    return false
+  }
+
+  return true
+}
+
+async function handleAvatarPicked(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file || !validateAvatarFile(file)) return
+
+  const fd = new FormData()
+  fd.append('avatar', file)
+
+  avatarSaving.value = true
+  try {
+    await updateProfile(fd)
+    await userStore.fetchUserInfo()
+    userStore.updateAvatarUrl(URL.createObjectURL(file))
+    ElMessage.success('头像已更新')
+  } catch {
+    // error handled by interceptor
+  } finally {
+    avatarSaving.value = false
+  }
+}
+
+function validateVerificationFile(file) {
+  if (!['image/jpeg', 'image/png'].includes(file.type)) {
+    ElMessage.error('认证图片仅支持 JPG/PNG 格式')
+    return false
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    ElMessage.error('认证图片不能超过5MB')
+    return false
+  }
+
+  return true
+}
+
+function handleVerificationFileChange(file) {
+  if (!file.raw || !validateVerificationFile(file.raw)) {
+    verificationImageFile.value = null
+    verificationForm.verificationImage = null
+    verificationFileList.value = []
+    verificationUploadRef.value?.clearFiles()
+    verificationFormRef.value?.validateField('verificationImage').catch(() => {})
+    return
+  }
+  verificationImageFile.value = file.raw
+  verificationForm.verificationImage = file.raw
+  verificationFileList.value = [file]
+  verificationFormRef.value?.validateField('verificationImage').catch(() => {})
+}
+
+function handleVerificationFileRemove() {
+  verificationImageFile.value = null
+  verificationForm.verificationImage = null
+  verificationFileList.value = []
+  verificationFormRef.value?.validateField('verificationImage').catch(() => {})
+}
+
+async function handleVerificationSubmit() {
+  const valid = await verificationFormRef.value?.validate().catch(() => false)
+  if (!valid) return
+
+  const fd = new FormData()
+  fd.append('realName', verificationForm.realName)
+  fd.append('studentId', verificationForm.studentId)
+  fd.append('verificationImage', verificationForm.verificationImage)
+
+  verificationSubmitting.value = true
+  try {
+    await submitVerification(fd)
+    await userStore.fetchUserInfo()
+    ElMessage.success('认证提交成功，请等待审核')
+    verificationVisible.value = false
+  } catch {
+    // error handled by interceptor
+  } finally {
+    verificationSubmitting.value = false
+  }
 }
 
 function isValueChanged(field) {
@@ -354,6 +602,30 @@ function isValueChanged(field) {
   const prev = original[field]
   const normalize = (v) => (v === null || v === '' ? '' : v)
   return normalize(current) !== normalize(prev)
+}
+
+function isNoProfileChangeError(error) {
+  const message = error?.message || ''
+  const reason = error?.errors?.reason || ''
+  const requestError = error?.errors?.request || ''
+  return [message, reason, requestError].some(text =>
+      typeof text === 'string' && (
+        text.includes('未修改') ||
+        text.includes('没有修改') ||
+        text.includes('无需修改') ||
+        text.includes('至少提交一个要修改的字段')
+      )
+  )
+}
+
+function showProfileSaveError(error) {
+  const errors = error?.errors
+  if (error?.code === 40001 && errors) {
+    const detail = Object.entries(errors).map(([k, v]) => `${k}: ${v}`).join('；')
+    ElMessage.error(detail || error.message || '保存失败')
+    return
+  }
+  ElMessage.error(error?.message || '保存失败')
 }
 
 async function loadPointStatus() {
@@ -407,35 +679,24 @@ async function handleSave() {
     hasChange = true
   }
 
-  // 头像
-  if (avatarFile.value) {
-    fd.append('avatar', avatarFile.value)
-    hasChange = true
-  }
-
   if (!hasChange) {
-    ElMessage.warning('没有修改任何资料')
+    isEditing.value = false
     return
   }
 
   saving.value = true
   try {
-    await updateProfile(fd)
+    await updateProfile(fd, { silentError: true })
     await userStore.fetchUserInfo()
-
-    // 如果上传了新头像，立即更新全局头像（从本地文件生成新 URL）
-    if (avatarFile.value) {
-      const newUrl = URL.createObjectURL(avatarFile.value)
-      userStore.updateAvatarUrl(newUrl)
-    } else {
-      // 没有修改头像，仍从后端同步最新头像（例如后端可能有默认头像或其他场景）
-      await userStore.loadAvatar()
-    }
 
     ElMessage.success('保存成功')
     isEditing.value = false
-  } catch {
-    // error handled by interceptor
+  } catch (error) {
+    if (isNoProfileChangeError(error)) {
+      isEditing.value = false
+      return
+    }
+    showProfileSaveError(error)
   } finally {
     saving.value = false
   }
@@ -493,6 +754,18 @@ onMounted(async () => {
 
 .visitor-name-row .auth-status-pill {
   margin-left: 0;
+}
+
+.admin-role-tag {
+  --el-tag-bg-color: #ff6f9f;
+  --el-tag-border-color: #ff6f9f;
+  --el-tag-text-color: #fff;
+  height: 24px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 4px 10px rgba(255, 111, 159, 0.22);
 }
 
 .visitor-public-list {
@@ -570,10 +843,60 @@ onMounted(async () => {
 .profile-avatar {
   flex: 0 0 auto;
   box-shadow: 0 12px 28px rgba(64, 158, 255, 0.16);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 .profile-avatar :deep(.el-icon) {
   font-size: 46px;
+}
+
+.avatar-action-trigger {
+  width: 104px;
+  height: 104px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.avatar-action-trigger:hover:not(:disabled) .profile-avatar,
+.avatar-action-trigger:focus-visible .profile-avatar {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 30px rgba(64, 158, 255, 0.22);
+}
+
+.avatar-action-trigger:focus-visible {
+  outline: 3px solid rgba(64, 158, 255, 0.28);
+  outline-offset: 4px;
+}
+
+.avatar-action-trigger:disabled {
+  cursor: wait;
+}
+
+.avatar-saving-mask {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: rgba(31, 95, 159, 0.56);
+  font-size: 13px;
+  line-height: 1;
+  font-weight: 700;
+}
+
+.avatar-file-input {
+  display: none;
 }
 
 .identity-text {
@@ -1156,11 +1479,6 @@ onMounted(async () => {
   font-weight: 600;
 }
 
-.info-card {
-  margin-top: 24px;
-  border-radius: 8px;
-}
-
 .eval-card {
   margin-top: 20px;
   border-radius: 8px;
@@ -1238,31 +1556,117 @@ onMounted(async () => {
   margin-top: 16px;
 }
 
-.info-card :deep(.el-card__header) {
-  padding: 18px 28px;
+.profile-edit-form {
+  padding-right: 4px;
+}
+
+:deep(.profile-edit-dialog) {
+  border-radius: 8px;
+}
+
+:deep(.profile-edit-dialog .el-dialog__header) {
+  padding: 20px 24px 12px;
+  margin-right: 0;
+}
+
+:deep(.profile-edit-dialog .el-dialog__title) {
+  color: #303133;
   font-size: 18px;
   font-weight: 700;
 }
 
-.info-card :deep(.el-card__body) {
-  padding: 28px;
+:deep(.profile-edit-dialog .el-dialog__body) {
+  padding: 12px 24px 6px;
 }
 
-.edit-actions {
+:deep(.profile-edit-dialog .el-dialog__footer) {
+  padding: 14px 24px 22px;
+}
+
+.edit-dialog-actions {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  margin-top: 20px;
-  padding: 20px;
-  background: #fff;
-  border: 1px solid #ebeef5;
+}
+
+:deep(.verification-dialog) {
   border-radius: 8px;
 }
 
-.upload-tip {
-  font-size: 12px;
-  color: #909399;
+:deep(.verification-dialog .el-dialog__header) {
+  padding: 20px 24px 12px;
+  margin-right: 0;
+}
+
+:deep(.verification-dialog .el-dialog__title) {
+  color: #303133;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+:deep(.verification-dialog .el-dialog__body) {
+  padding: 12px 24px 6px;
+}
+
+:deep(.verification-dialog .el-dialog__footer) {
+  padding: 14px 24px 22px;
+}
+
+.verification-form {
+  padding-right: 4px;
+}
+
+.verification-form :deep(.verification-upload--filled .el-upload--picture-card) {
+  display: none;
+}
+
+.verification-upload-tip {
   margin-top: 8px;
+  color: #909399;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.verification-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+:deep(.avatar-preview-dialog) {
+  border-radius: 8px;
+}
+
+:deep(.avatar-preview-dialog .el-dialog__header) {
+  padding: 20px 24px 12px;
+  margin-right: 0;
+}
+
+:deep(.avatar-preview-dialog .el-dialog__title) {
+  color: #303133;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+:deep(.avatar-preview-dialog .el-dialog__body) {
+  padding: 12px 24px 24px;
+}
+
+.avatar-preview-body {
+  min-height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #f5f7fa;
+}
+
+.avatar-preview-image {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
 }
 
 @media (max-width: 1080px) {

@@ -15,4 +15,15 @@ body {
   background-color: #f5f7fa;
 }
 
+.el-avatar:not(.profile-avatar):not(.nav-avatar):not(.card-avatar) .el-icon {
+  width: 58%;
+  height: 58%;
+  font-size: 28px;
+}
+
+.el-avatar:not(.profile-avatar):not(.nav-avatar):not(.card-avatar) .el-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
 </style>

@@ -1,11 +1,20 @@
 import axios from 'axios'
-import { ElMessage } from 'element-plus'
+import { showErrorMessage } from '../utils/message'
 import router from '../router'
 
 const request = axios.create({
   baseURL: '/api/v1',
   timeout: 10000
 })
+
+function goAuthDialog() {
+  const current = router.currentRoute.value
+  const redirect = current?.fullPath && current.fullPath !== '/hall' ? current.fullPath : undefined
+  router.push({
+    path: '/hall',
+    query: redirect ? { auth: 'login', redirect } : { auth: 'login' }
+  })
+}
 
 // 请求拦截器：携带 Token
 request.interceptors.request.use(config => {
@@ -98,14 +107,14 @@ request.interceptors.response.use(
           const detail = errors
               ? Object.entries(errors).map(([k, v]) => `${k}: ${v}`).join('；')
               : displayMsg
-          ElMessage.error(detail)
+          showErrorMessage(detail)
         } else {
           // 其他业务错误：根据 shouldLogout 决定是否清除 token 并跳转
           if (shouldLogout) {
             localStorage.removeItem('token')
-            router.push('/login')
+            goAuthDialog()
           }
-          ElMessage.error(displayMsg)
+          showErrorMessage(displayMsg)
         }
         return Promise.reject(error)
       }
@@ -117,6 +126,9 @@ request.interceptors.response.use(
         return res.text().then(text => {
           let parsed = null
           try { parsed = JSON.parse(text) } catch (e) { /* ignore */ }
+          if (parsed) {
+            error.parsedResponse = parsed
+          }
           const code = parsed?.code || error.response?.status || 0
           const reason = parsed?.errors?.reason
           const message = parsed?.message || '请求失败'
@@ -147,25 +159,25 @@ function handleHttpError(code, reason, message) {
   const { message: displayMsg, shouldLogout } = buildErrorInfo(code, reason, message)
 
   if (code === 40001 || code === 400) {
-    ElMessage.error(displayMsg)
+    showErrorMessage(displayMsg)
   } else if (code === 40101 || code === 401) {
     if (shouldLogout) {
       localStorage.removeItem('token')
-      router.push('/login')
+      goAuthDialog()
     }
-    ElMessage.error(displayMsg)
+    showErrorMessage(displayMsg)
   } else if (code === 40301 || code === 403) {
-    ElMessage.error(displayMsg)
+    showErrorMessage(displayMsg)
   } else if (code === 40401 || code === 404) {
-    ElMessage.error(displayMsg)
+    showErrorMessage(displayMsg)
   } else if (code === 40901 || code === 409) {
-    ElMessage.error(displayMsg)
+    showErrorMessage(displayMsg)
   } else if (code === 50001 || code === 500) {
-    ElMessage.error(displayMsg)
+    showErrorMessage(displayMsg)
   } else if (code === 50201) {
-    ElMessage.error(displayMsg)
+    showErrorMessage(displayMsg)
   } else {
-    ElMessage.error(displayMsg || '网络错误，请稍后重试')
+    showErrorMessage(displayMsg || '网络错误，请稍后重试')
   }
 }
 

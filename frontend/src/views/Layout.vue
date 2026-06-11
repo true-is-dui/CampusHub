@@ -7,6 +7,7 @@
             <img class="brand-logo-img" :src="brandLogo" alt="CampusHub" />
           </router-link>
           <el-menu
+              ref="navMenuRef"
               :default-active="activeMenu"
               mode="horizontal"
               :ellipsis="false"
@@ -33,94 +34,105 @@
             </el-menu-item>
             <el-menu-item index="/my-evaluations">
               <span class="nav-item-content">
-                <el-icon class="nav-item-icon"><Star /></el-icon>
+                <el-icon class="nav-item-icon"><Comment /></el-icon>
                 <span>历史评价</span>
               </span>
             </el-menu-item>
             <el-menu-item v-if="userStore.isAdmin" index="/admin/verification">
-              管理后台
+              <span class="nav-item-content">
+                <el-icon class="nav-item-icon"><Setting /></el-icon>
+                <span>管理后台</span>
+              </span>
             </el-menu-item>
           </el-menu>
         </div>
         <div class="header-right">
-          <template v-if="userStore.isLoggedIn">
-            <div class="avatar-popover-anchor">
-              <el-popover
-                  v-model:visible="userPopoverVisible"
-                  placement="bottom"
-                  trigger="manual"
-                  :width="240"
-                  :offset="16"
-                  popper-class="user-popover"
-              >
-                <template #reference>
-                  <button
-                      class="avatar-entry"
-                      :class="{ active: userPopoverVisible }"
-                      type="button"
-                      @mouseenter="showUserPopover"
-                      @mouseleave="scheduleHideUserPopover"
-                      @click="goProfileFromCard"
-                      aria-label="个人中心"
-                  >
-                    <el-avatar :size="38" :src="userStore.avatarUrl" icon="UserFilled" class="nav-avatar" />
-                  </button>
-                </template>
-                <div class="user-card" @mouseenter="showUserPopover" @mouseleave="scheduleHideUserPopover">
-                  <div class="profile-card-link" @click="goProfileFromCard">
-                    <el-avatar :size="92" :src="userStore.avatarUrl" icon="UserFilled" class="card-avatar" />
-                    <div class="card-name">{{ userStore.userInfo?.nickname || userStore.userInfo?.username }}</div>
-                  </div>
-                  <div class="card-meta">
-                    <el-tag :type="authTagType" size="small" :class="{ 'approved-auth-tag': userStore.userInfo?.authStatus === 'APPROVED' }">
-                      {{ authStatusLabel }}
-                    </el-tag>
-                    <el-tag v-if="userStore.userInfo?.role === 'ADMIN'" type="danger" size="small">管理员</el-tag>
-                  </div>
-                  <div class="card-points">
-                    <span>积分余额</span>
-                    <strong>{{ userStore.userInfo?.pointBalance ?? 0 }}</strong>
-                  </div>
-                  <div class="card-actions">
-                    <button class="logout-action" type="button" @click="handleLogout">
-                      <el-icon><SwitchButton /></el-icon>
-                      <span>退出登录</span>
-                    </button>
-                  </div>
-                </div>
-              </el-popover>
-            </div>
-            <button
-                class="header-icon-entry checkin-entry"
-                :class="{ done: checkedIn }"
-                type="button"
-                :disabled="checkedIn || checkInLoading"
-                @click="handleCheckIn"
-                aria-label="每日签到"
+          <div class="avatar-popover-anchor">
+            <el-popover
+                v-if="userStore.isLoggedIn"
+                v-model:visible="userPopoverVisible"
+                placement="bottom"
+                trigger="manual"
+                :width="240"
+                :offset="16"
+                popper-class="user-popover"
             >
-              <el-badge is-dot :hidden="!checkInStatusLoaded || checkedIn">
-                <span class="checkin-icon-shell" :class="{ checked: checkedIn }">
-                  <span v-if="checkedIn" class="checked-calendar-icon" aria-hidden="true"></span>
-                  <el-icon v-else class="header-action-icon"><Calendar /></el-icon>
-                </span>
-              </el-badge>
-              <span class="header-icon-label">{{ checkedIn ? '已签' : '签到' }}</span>
+              <template #reference>
+                <button
+                    class="avatar-entry"
+                    :class="{ active: userPopoverVisible }"
+                    type="button"
+                    @mouseenter="showUserPopover"
+                    @mouseleave="scheduleHideUserPopover"
+                    @click="goProfileFromCard"
+                    aria-label="个人中心"
+                >
+                  <el-avatar :size="38" :src="userStore.avatarUrl" icon="UserFilled" class="nav-avatar" />
+                </button>
+              </template>
+              <div class="user-card" @mouseenter="showUserPopover" @mouseleave="scheduleHideUserPopover">
+                <div class="profile-card-link" @click="goProfileFromCard">
+                  <el-avatar :size="92" :src="userStore.avatarUrl" icon="UserFilled" class="card-avatar" />
+                  <div class="card-name">{{ userStore.userInfo?.nickname || userStore.userInfo?.username }}</div>
+                </div>
+                <div class="card-meta">
+                  <el-tag :type="authTagType" size="small" :class="{ 'approved-auth-tag': userStore.userInfo?.authStatus === 'APPROVED' || userStore.userInfo?.role === 'ADMIN' }">
+                    {{ authStatusLabel }}
+                  </el-tag>
+                </div>
+                <div class="card-points">
+                  <span>积分余额</span>
+                  <strong>{{ userStore.userInfo?.pointBalance ?? 0 }}</strong>
+                </div>
+                <div class="card-actions">
+                  <button class="logout-action" type="button" @click="handleLogout">
+                    <el-icon><SwitchButton /></el-icon>
+                    <span>退出登录</span>
+                  </button>
+                </div>
+              </div>
+            </el-popover>
+            <button
+                v-else
+                class="header-login-button"
+                type="button"
+                @click="openAuthDialog('login')"
+            >
+              登录
             </button>
-            <button class="message-entry" type="button" @click="openNotificationDrawer" aria-label="消息通知">
-              <el-badge :value="unreadCount > 99 ? '99+' : unreadCount" :hidden="unreadCount <= 0">
-                <el-icon class="message-icon"><Message /></el-icon>
-              </el-badge>
-              <span class="message-label">消息</span>
-            </button>
-            <el-button class="header-publish-button" type="primary" @click="router.push('/publish')">
-              <el-icon><Upload /></el-icon>
-              <span>发布</span>
-            </el-button>
-          </template>
-          <template v-else>
-            <el-button text @click="$router.push('/login')">登录</el-button>
-            <el-button type="primary" @click="$router.push('/register')">注册</el-button>
-          </template>
+          </div>
+          <button
+              class="header-icon-entry checkin-entry"
+              :class="{ done: userStore.isLoggedIn && checkedIn }"
+              type="button"
+              :disabled="userStore.isLoggedIn && (checkedIn || checkInLoading)"
+              @click="handleCheckInClick"
+              aria-label="每日签到"
+          >
+            <el-badge is-dot :hidden="!userStore.isLoggedIn || !checkInStatusLoaded || checkedIn">
+              <span class="checkin-icon-shell" :class="{ checked: userStore.isLoggedIn && checkedIn }">
+                <span v-if="userStore.isLoggedIn && checkedIn" class="checked-calendar-icon" aria-hidden="true"></span>
+                <el-icon v-else class="header-action-icon"><Calendar /></el-icon>
+              </span>
+            </el-badge>
+            <span class="header-icon-label">{{ userStore.isLoggedIn && checkedIn ? '已签' : '签到' }}</span>
+          </button>
+          <button
+              class="message-entry"
+              type="button"
+              @click="handleMessageClick"
+              aria-label="消息通知"
+              :aria-expanded="userStore.isLoggedIn && notificationDrawerVisible"
+          >
+            <el-badge :value="unreadCount > 99 ? '99+' : unreadCount" :hidden="!userStore.isLoggedIn || unreadCount <= 0">
+              <el-icon class="message-icon"><Message /></el-icon>
+            </el-badge>
+            <span class="message-label">消息</span>
+          </button>
+          <el-button class="header-publish-button" type="primary" @click="handlePublishClick">
+            <el-icon><Upload /></el-icon>
+            <span>发布</span>
+          </el-button>
         </div>
       </div>
     </el-header>
@@ -147,17 +159,24 @@
     >
       <NotificationList @navigate="closeNotificationDrawer" />
     </el-drawer>
+    <AuthDialog
+        v-model="authDialogVisible"
+        :initial-mode="authDialogMode"
+        :redirect-to="authRedirectTo"
+        @success="authLoginSucceeded = true"
+    />
   </el-container>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch, provide } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import { getUnreadCount } from '@/api/notification'
 import { checkIn, getPointBalance, getPointTransactions } from '@/api/points'
 import NotificationList from '@/views/notification/NotificationList.vue'
+import AuthDialog from '@/views/auth/AuthDialog.vue'
 import brandLogo from '@/assets/brand-logo.png'
 // 不再需要单独引入 getUserAvatar，已由 Store 管理
 
@@ -167,14 +186,36 @@ const userStore = useUserStore()
 const unreadCount = ref(0)
 const userPopoverVisible = ref(false)
 const notificationDrawerVisible = ref(false)
+const authDialogVisible = ref(false)
+const authDialogMode = ref('login')
+const authLoginSucceeded = ref(false)
 const checkedIn = ref(false)
 const checkInStatusLoaded = ref(false)
 const checkInLoading = ref(false)
+const navMenuRef = ref(null)
 let pollTimer = null
 let userPopoverTimer = null
 const POINT_STATUS_UPDATED_EVENT = 'campushub:point-status-updated'
+const MY_PICKUPS_RETURN_STATE_KEY = 'campushub:my-pickups:return-state'
 
-const activeMenu = computed(() => route.path)
+const activeMenu = computed(() => {
+  const path = route.path
+  if (path === '/hall' || path === '/publish') return '/hall'
+  if (path === '/my-pickups') return '/my-pickups'
+  if (path.startsWith('/pickup/')) {
+    return hasMyPickupsReturnState() ? '/my-pickups' : '/hall'
+  }
+  if (path === '/points' || path.startsWith('/payment/')) return '/points'
+  if (path === '/my-evaluations' || path.startsWith('/evaluation/')) return '/my-evaluations'
+  if (path.startsWith('/admin/')) return '/admin/verification'
+  if (path === '/profile' || path.startsWith('/user/')) return '/hall'
+  return ''
+})
+const authRedirectTo = computed(() => {
+  return typeof route.query.redirect === 'string' && route.query.redirect
+      ? route.query.redirect
+      : '/hall'
+})
 const showProfilePerspectiveFilter = computed(() => route.path === '/profile')
 const profilePerspectiveOptions = [
   { label: '我自己', value: 'self' },
@@ -196,6 +237,7 @@ const profilePerspective = computed({
 })
 
 const authStatusLabel = computed(() => {
+  if (userStore.userInfo?.role === 'ADMIN') return '管理员'
   const map = {
     UNVERIFIED: '未认证',
     REVIEWING: '审核中',
@@ -206,6 +248,7 @@ const authStatusLabel = computed(() => {
 })
 
 const authTagType = computed(() => {
+  if (userStore.userInfo?.role === 'ADMIN') return ''
   const map = {
     UNVERIFIED: 'info',
     REVIEWING: 'warning',
@@ -215,11 +258,62 @@ const authTagType = computed(() => {
   return map[userStore.userInfo?.authStatus] || 'info'
 })
 
+function hasMyPickupsReturnState() {
+  try {
+    return Boolean(sessionStorage.getItem(MY_PICKUPS_RETURN_STATE_KEY))
+  } catch {
+    return false
+  }
+}
+
+function syncNavMenuActive(index = activeMenu.value) {
+  nextTick(() => {
+    navMenuRef.value?.updateActiveIndex(index)
+    const focusedElement = document.activeElement
+    if (focusedElement?.closest?.('.nav-menu')) {
+      focusedElement.blur()
+    }
+  })
+}
+
 // 监听用户 ID 变化，自动触发 Store 加载头像
 watch(() => userStore.userInfo?.userId, () => {
   userStore.loadAvatar()
   fetchUnreadCount()
   loadCheckInStatus()
+})
+
+watch(
+  () => [route.path, route.query.auth, userStore.isLoggedIn],
+  () => {
+    if (userStore.isLoggedIn || route.path !== '/hall') return
+    if (route.query.auth === 'login' || route.query.auth === 'register') {
+      authDialogMode.value = route.query.auth
+      authLoginSucceeded.value = false
+      authDialogVisible.value = true
+    }
+  },
+  { immediate: true }
+)
+
+watch(activeMenu, (index) => {
+  syncNavMenuActive(index)
+}, { immediate: true, flush: 'post' })
+
+watch(
+  () => route.fullPath,
+  () => {
+    syncNavMenuActive()
+  },
+  { flush: 'post' }
+)
+
+watch(authDialogVisible, (visible) => {
+  if (visible || authLoginSucceeded.value || route.path !== '/hall' || !route.query.auth) return
+  const query = { ...route.query }
+  delete query.auth
+  delete query.redirect
+  router.replace({ path: '/hall', query })
 })
 
 async function fetchUnreadCount() {
@@ -235,13 +329,45 @@ async function fetchUnreadCount() {
 // 将 fetchUnreadCount 提供给子组件，以便标记已读后立即刷新
 provide('refreshUnreadCount', fetchUnreadCount)
 
-function openNotificationDrawer() {
-  notificationDrawerVisible.value = true
-  fetchUnreadCount()
+function toggleNotificationDrawer() {
+  notificationDrawerVisible.value = !notificationDrawerVisible.value
+  if (notificationDrawerVisible.value) {
+    fetchUnreadCount()
+  }
 }
 
 function closeNotificationDrawer() {
   notificationDrawerVisible.value = false
+}
+
+function openAuthDialog(mode) {
+  authDialogMode.value = mode
+  authLoginSucceeded.value = false
+  if (route.path !== '/hall') {
+    router.push({ path: '/hall', query: { auth: mode } })
+    return
+  }
+  authDialogVisible.value = true
+}
+
+function handleCheckInClick() {
+  if (!userStore.isLoggedIn) {
+    openAuthDialog('login')
+    return
+  }
+  handleCheckIn()
+}
+
+function handleMessageClick() {
+  if (!userStore.isLoggedIn) {
+    openAuthDialog('login')
+    return
+  }
+  toggleNotificationDrawer()
+}
+
+function handlePublishClick() {
+  router.push('/publish')
 }
 
 function isToday(dateStr) {
@@ -329,7 +455,8 @@ async function handleCheckIn() {
 
 function handleLogout() {
   userStore.clearToken()
-  router.push('/login')
+  authLoginSucceeded.value = false
+  router.push({ path: '/hall', query: { auth: 'login' } })
 }
 
 function hideUserPopoverNow() {
@@ -402,8 +529,10 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 3001;
 }
 
@@ -465,7 +594,9 @@ onUnmounted(() => {
 }
 
 .nav-item-icon {
+  width: 19px;
   font-size: 19px;
+  flex: 0 0 19px;
 }
 
 .header-right {
@@ -606,6 +737,8 @@ onUnmounted(() => {
   margin-right: 16px;
   display: flex;
   align-items: center;
+  min-width: 38px;
+  min-height: 38px;
 }
 
 .avatar-entry {
@@ -626,6 +759,28 @@ onUnmounted(() => {
 
 .avatar-entry.active .nav-avatar {
   transform: scale(2.30) translateY(13px);
+}
+
+.header-login-button {
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 50%;
+  color: #fff;
+  background: #ff6f9f;
+  cursor: pointer;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 38px;
+  text-align: center;
+  box-shadow: 0 6px 14px rgba(255, 111, 159, 0.24);
+}
+
+.header-login-button:hover,
+.header-login-button:focus {
+  color: #fff;
+  background: #ff5f95;
 }
 
 .nav-avatar :deep(.el-icon) {
@@ -739,7 +894,8 @@ onUnmounted(() => {
   max-width: 1200px;
   margin: 0 auto;
   width: 100%;
-  padding: 20px;
+  padding: 84px 20px 20px;
+  box-sizing: border-box;
 }
 
 .profile-perspective-bar {

@@ -117,6 +117,10 @@ const props = defineProps({
   authStatus: {
     type: String,
     default: ''
+  },
+  role: {
+    type: String,
+    default: ''
   }
 })
 
@@ -138,8 +142,10 @@ const emptyRoleSummary = {
 const publisherSummary = computed(() => ratingSummary.value?.publisherRoleSummary || emptyRoleSummary)
 const acceptorSummary = computed(() => ratingSummary.value?.acceptorRoleSummary || emptyRoleSummary)
 
-const displayAuthStatus = computed(() => props.authStatus || 'APPROVED')
+const isAdmin = computed(() => props.role === 'ADMIN' || user.value?.role === 'ADMIN')
+const displayAuthStatus = computed(() => props.authStatus || user.value?.authStatus || 'APPROVED')
 const authStatusLabel = computed(() => {
+  if (isAdmin.value) return '管理员'
   const map = {
     UNVERIFIED: '未认证',
     REVIEWING: '审核中',
@@ -149,6 +155,7 @@ const authStatusLabel = computed(() => {
   return map[displayAuthStatus.value] || '已认证'
 })
 const authStatusClass = computed(() => {
+  if (isAdmin.value) return 'auth-status-pill--approved'
   const map = {
     UNVERIFIED: 'auth-status-pill--unverified',
     REVIEWING: 'auth-status-pill--reviewing',

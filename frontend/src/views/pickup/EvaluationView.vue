@@ -15,9 +15,9 @@
               <span class="reviewee-name">{{ receivedEvaluation.reviewer?.nickname || '匿名用户' }}</span>
               <span
                   v-if="receivedEvaluation.revieweeRoleInBusiness"
-                  :class="['role-pill', rolePillClass(receivedEvaluation.revieweeRoleInBusiness)]"
+                  :class="['role-pill', rolePillClass(getReviewerRole(receivedEvaluation.revieweeRoleInBusiness))]"
               >
-                {{ roleLabel(receivedEvaluation.revieweeRoleInBusiness) }}
+                {{ roleLabel(getReviewerRole(receivedEvaluation.revieweeRoleInBusiness)) }}
               </span>
             </div>
           </div>
@@ -149,6 +149,12 @@ function goPickupDetail() {
 function roleLabel(role) {
   const map = { PUBLISHER: '发布者', ACCEPTOR: '接单者' }
   return map[role] || role
+}
+
+function getReviewerRole(revieweeRole) {
+  if (revieweeRole === 'PUBLISHER') return 'ACCEPTOR'
+  if (revieweeRole === 'ACCEPTOR') return 'PUBLISHER'
+  return revieweeRole
 }
 
 function rolePillClass(role) {

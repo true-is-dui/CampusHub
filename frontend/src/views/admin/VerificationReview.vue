@@ -1,24 +1,22 @@
 <template>
   <div class="verification-review">
-    <el-page-header @back="$router.back()">
-      <template #content>
-        <span>认证审核</span>
-      </template>
-    </el-page-header>
+    <div class="review-toolbar">
+      <h1 class="page-title">认证审核</h1>
 
-    <div class="filter-bar">
-      <el-select
-          v-model="statusFilter"
-          placeholder="审核状态"
-          clearable
-          style="width: 160px"
-          @change="onFilterChange"
-      >
-        <el-option label="全部" value="" />
-        <el-option label="待审核" value="PENDING" />
-        <el-option label="已通过" value="APPROVED" />
-        <el-option label="已拒绝" value="REJECTED" />
-      </el-select>
+      <div class="filter-bar">
+        <el-select
+            v-model="statusFilter"
+            placeholder="审核状态"
+            clearable
+            style="width: 160px"
+            @change="onFilterChange"
+        >
+          <el-option label="全部" value="" />
+          <el-option label="待审核" value="PENDING" />
+          <el-option label="已通过" value="APPROVED" />
+          <el-option label="已拒绝" value="REJECTED" />
+        </el-select>
+      </div>
     </div>
 
     <el-table v-loading="loading" :data="list" border stripe style="width: 100%">
@@ -30,7 +28,7 @@
           {{ row.nickname || '-' }}
         </template>
       </el-table-column>
-      <el-table-column prop="studentIdMasked" label="学号" width="150" />
+      <el-table-column prop="studentId" label="学号" width="150" />
       <el-table-column label="认证图片" width="120">
         <template #default="{ row }">
           <el-button text type="primary" size="small" @click="showImage(row)">
@@ -107,13 +105,14 @@
             fit="contain"
             style="width: 100%; max-height: 500px"
             :preview-src-list="[previewImageUrl]"
+            hide-on-click-modal
         />
         <el-empty v-else-if="!imageLoading" description="无法加载认证图片" />
       </div>
     </el-dialog>
 
     <!-- Reject Dialog -->
-    <el-dialog v-model="rejectDialogVisible" title="拒绝认证" width="400px">
+    <el-dialog v-model="rejectDialogVisible" title="拒绝认证" width="400px" align-center>
       <el-form ref="rejectFormRef" :model="rejectForm" :rules="rejectRules" label-width="80px">
         <el-form-item label="拒绝原因" prop="reason">
           <el-input
@@ -308,8 +307,27 @@ onMounted(() => {
   margin: 0 auto;
 }
 
+.review-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.page-title {
+  margin: 0;
+  color: #303133;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 32px;
+}
+
 .filter-bar {
-  margin: 20px 0;
+  display: flex;
+  justify-content: flex-end;
+  flex: 0 0 auto;
 }
 
 .pagination-wrapper {
@@ -337,5 +355,12 @@ onMounted(() => {
 .reviewed-tag.rejected {
   color: #f56c6c;
   background: #fef0f0;
+}
+
+@media (max-width: 600px) {
+  .review-toolbar,
+  .filter-bar {
+    justify-content: flex-start;
+  }
 }
 </style>

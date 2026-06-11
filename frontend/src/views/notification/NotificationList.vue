@@ -22,7 +22,11 @@
         <div class="notification-header">
           <div class="notification-type">
             <el-badge :is-dot="item.readStatus === 'UNREAD'" type="danger">
-              <el-tag :type="getTypeTag(item.type)" size="small">
+              <el-tag
+                  class="notification-type-tag"
+                  :class="`notification-type-tag--${String(item.type || 'default').toLowerCase()}`"
+                  size="small"
+              >
                 {{ getTypeLabel(item.type) }}
               </el-tag>
             </el-badge>
@@ -76,17 +80,6 @@ function getTypeLabel(type) {
   return typeLabelMap[type] || type || '通知'
 }
 
-function getTypeTag(type) {
-  const map = {
-    PICKUP: 'danger',
-    PAYMENT: 'warning',
-    SYSTEM: 'info',
-    VERIFICATION: 'success',
-    EVALUATION: 'info'
-  }
-  return map[type] || 'info'
-}
-
 function formatTime(dateStr) {
   if (!dateStr) return ''
   const d = new Date(dateStr)
@@ -135,10 +128,10 @@ async function handleRead(item) {
     router.push({ path: `/evaluation/${item.businessId}`, query: { mode: 'received' } })
   } else if (item.type === 'VERIFICATION') {
     emit('navigate')
-    router.push('/verification')
+    router.push('/profile')
   } else if (item.type === 'PAYMENT' && item.businessId) {
     emit('navigate')
-    router.push('/transactions')
+    router.push('/points')
   } else if (item.businessType === 'PICKUP_REQUEST' && item.businessId) {
     emit('navigate')
     router.push(`/pickup/${item.businessId}`)
@@ -220,6 +213,43 @@ onMounted(() => {
   color: #909399;
   font-size: 12px;
   white-space: nowrap;
+}
+
+.notification-type-tag {
+  --el-tag-bg-color: #f4f4f5;
+  --el-tag-border-color: #dcdfe6;
+  --el-tag-text-color: #606266;
+  font-weight: 600;
+}
+
+.notification-type-tag--pickup {
+  --el-tag-bg-color: #ecf5ff;
+  --el-tag-border-color: #b3d8ff;
+  --el-tag-text-color: #337ecc;
+}
+
+.notification-type-tag--payment {
+  --el-tag-bg-color: #fdf6ec;
+  --el-tag-border-color: #f3d19e;
+  --el-tag-text-color: #b88230;
+}
+
+.notification-type-tag--system {
+  --el-tag-bg-color: #f4f4f5;
+  --el-tag-border-color: #d3d4d6;
+  --el-tag-text-color: #606266;
+}
+
+.notification-type-tag--verification {
+  --el-tag-bg-color: #f0f9eb;
+  --el-tag-border-color: #b3e19d;
+  --el-tag-text-color: #529b2e;
+}
+
+.notification-type-tag--evaluation {
+  --el-tag-bg-color: #fff0f6;
+  --el-tag-border-color: #ffbdd6;
+  --el-tag-text-color: #d95f8d;
 }
 
 .notification-title {

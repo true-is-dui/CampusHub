@@ -3,7 +3,7 @@ import request from './request'
 export const getMe = () => request.get('/users/me')
 
 // [修复] 删除手动 Content-Type，交由 axios 自动处理（自动添加 boundary 参数）
-export const updateProfile = (formData) => request.put('/users/me/profile', formData)
+export const updateProfile = (formData, config = {}) => request.put('/users/me/profile', formData, config)
 
 // [修复] 删除手动 Content-Type，交由 axios 自动处理（自动添加 boundary 参数）
 export const submitVerification = (formData) => request.post('/users/me/verification', formData)

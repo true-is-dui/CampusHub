@@ -2,8 +2,8 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '../store/user'
 
 const routes = [
-  { path: '/login', component: () => import('../views/auth/LoginView.vue'), meta: { guest: true } },
-  { path: '/register', component: () => import('../views/auth/RegisterView.vue'), meta: { guest: true } },
+  { path: '/login', redirect: to => ({ path: '/hall', query: { ...to.query, auth: 'login' } }) },
+  { path: '/register', redirect: to => ({ path: '/hall', query: { ...to.query, auth: 'register' } }) },
   {
     path: '/',
     component: () => import('../views/Layout.vue'),
@@ -18,14 +18,14 @@ const routes = [
       { path: 'my-pickups', component: () => import('../views/pickup/MyPickups.vue'), meta: { auth: true } },
 
       { path: 'profile', component: () => import('../views/user/ProfileView.vue'), meta: { auth: true } },
-      { path: 'verification', component: () => import('../views/user/VerificationView.vue'), meta: { auth: true } },
+      { path: 'verification', redirect: '/profile', meta: { auth: true } },
       { path: 'notifications', redirect: '/hall', meta: { auth: true } },
       { path: 'user/:id', component: () => import('../views/user/UserPublicProfile.vue') },
 
       { path: 'evaluation/:pickupId', component: () => import('../views/pickup/EvaluationView.vue'), meta: { auth: true } },
 
       { path: 'admin/verification', component: () => import('../views/admin/VerificationReview.vue'), meta: { auth: true, admin: true } },
-      { path: 'transactions', component: () => import('../views/user/TransactionList.vue'), meta: { auth: true } },
+      { path: 'transactions', redirect: '/points', meta: { auth: true } },
       { path: 'points', component: () => import('../views/user/PaymentDetail.vue'), meta: { auth: true } },
       { path: 'my-evaluations', component: () => import('../views/user/MyEvaluations.vue'), meta: { auth: true } },
       { path: 'payment/:id', redirect: '/points' }
@@ -45,21 +45,16 @@ const router = createRouter({
 
 router.beforeEach(async (to, from, next) => {
   const store = useUserStore()
-  // 游客页面（登录/注册），已登录则重定向到首页
-  if (to.meta.guest) {
-    if (store.isLoggedIn) return next('/')
-    return next()
-  }
   // 需要登录但未登录
   if (to.meta.auth && !store.isLoggedIn) {
-    return next('/login')
+    return next({ path: '/hall', query: { auth: 'login', redirect: to.fullPath } })
   }
   // 已登录但用户信息未加载
   if (store.isLoggedIn && !store.userInfo) {
     try {
       await store.fetchUserInfo()
     } catch {
-      return next('/login')
+      return next({ path: '/hall', query: { auth: 'login', redirect: to.fullPath } })
     }
   }
   // 需要管理员权限但不是管理员

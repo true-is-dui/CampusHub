@@ -275,17 +275,27 @@ onUnmounted(() => {
 }
 
 .pickup-list {
+  --pickup-card-height: 220px;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-rows: var(--pickup-card-height);
   gap: 16px;
   min-height: 200px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .pickup-card {
   cursor: pointer;
   transition: transform 0.2s;
   min-width: 0;
+  height: 100%;
+}
+
+.pickup-card :deep(.el-card__body) {
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 
 .pickup-card:hover {
@@ -293,7 +303,10 @@ onUnmounted(() => {
 }
 
 @media (max-width: 900px) {
-  .pickup-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pickup-list {
+    --pickup-card-height: 212px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 600px) {
@@ -302,7 +315,10 @@ onUnmounted(() => {
     justify-content: flex-start;
   }
 
-  .pickup-list { grid-template-columns: 1fr; }
+  .pickup-list {
+    --pickup-card-height: 204px;
+    grid-template-columns: 1fr;
+  }
 }
 
 .card-header {
@@ -326,6 +342,8 @@ onUnmounted(() => {
 
 .card-body {
   margin-bottom: 12px;
+  flex: 1;
+  min-height: 0;
 }
 
 .location-row {
@@ -335,6 +353,14 @@ onUnmounted(() => {
   margin-bottom: 6px;
   color: #606266;
   font-size: 14px;
+  min-width: 0;
+}
+
+.location-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .desc-preview {
@@ -344,6 +370,11 @@ onUnmounted(() => {
   margin-bottom: 8px;
   line-height: 1.5;
   word-break: break-word;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  min-height: 42px;
 }
 
 .deadline-row {
@@ -353,6 +384,14 @@ onUnmounted(() => {
   margin-top: 6px;
   color: #e6a23c;
   font-size: 13px;
+  min-width: 0;
+}
+
+.deadline-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card-footer {
@@ -361,6 +400,8 @@ onUnmounted(() => {
   align-items: center;
   color: #909399;
   font-size: 13px;
+  gap: 10px;
+  min-width: 0;
 }
 
 .publisher {
@@ -368,10 +409,19 @@ onUnmounted(() => {
   align-items: center;
   gap: 4px;
   cursor: pointer;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .publisher:hover {
   color: #409eff;
+}
+
+.time {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .load-more-wrapper {
