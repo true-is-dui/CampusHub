@@ -1,0 +1,12 @@
+classDiagram
+    PointService --> User : 更新余额
+    PointService --> PointTransaction : 写入流水
+
+    class PointService {
+        +grantInitialPoints(userId)
+        +checkIn(userId)
+        +spendForPublish(userId, amount, pickupId)
+        +refundForCancel(userId, amount, pickupId)
+        +transferOnComplete(payerId, receiverId, amount, pickupId)
+        #applyChange(userId, type, amount, relatedPickupId)
+    }

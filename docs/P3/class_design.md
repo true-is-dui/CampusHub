@@ -25,218 +25,15 @@
 
 ### 1.1 核心领域类关系图
 
-```mermaid
-classDiagram
-    User "1" --> "*" PickupRequest : 发布
-    User "1" --> "*" VerificationReview : 提交实名审核
+![核心领域类关系图](asset/core-domain-class.svg)
 
-    PickupRequest ..> StoredFile : 通过fileId引用凭证文件
-    Evaluation ..> PickupRequest : businessType=PICKUP_REQUEST,businessId
-    User "1" --> "*" Evaluation : 发出/收到
-    User "1" --> "*" NotificationRecord : 接收
-    User "1" --> "*" PointTransaction : 拥有积分流水
-    PointTransaction ..> PickupRequest : relatedPickupId
-
-    class User {
-        +Long id
-        +String username
-        +String passwordHash
-        +String studentId
-        +String realName
-        +String nickname
-        +Long avatarFileId
-        +Long verificationFileId
-        +AuthStatus authStatus
-        +UserRole role
-        +Long pointBalance
-        +LocalDate lastCheckInDate
-        +markAuthSubmitted(studentId, realName, fileId)
-        +markAuthApproved()
-        +markAuthRejected(reason)
-        +updateProfile(nickname, avatarFileId, college, contact)
-        +canParticipatePickup()
-        +deductPoints(amount)
-        +addPoints(amount)
-    }
-
-    class VerificationReview {
-        +Long id
-        +Long userId
-        +ReviewStatus status
-        +Long reviewerId
-        +String rejectReason
-        +markApproved(reviewerId)
-        +markRejected(reviewerId, reason)
-    }
-
-    class PickupRequest {
-        +Long id
-        +Long publisherId
-        +Long acceptorId
-        +String campus
-        +String pickupLocation
-        +String deliveryLocation
-        +String itemDescription
-        +Long pickupCredentialFileId
-        +RewardType rewardType
-        +BigDecimal rewardAmount
-        +PickupStatus status
-        +LocalDateTime acceptDeadline
-        +Long completionProofFileId
-        +markWaitingAccept()
-        +markAccepted(acceptorId)
-        +recordCompletionProof(fileId)
-        +markCompleted()
-        +markCancelled(reason)
-        +canViewPickupCredential(userId)
-        +isHallVisible()
-        +isPublisher(userId)
-        +isAcceptor(userId)
-    }
-
-    class PointTransaction {
-        +Long id
-        +Long userId
-        +PointTransactionType type
-        +Long amount
-        +Long balanceAfter
-        +Long relatedPickupId
-        +LocalDateTime createdAt
-    }
-
-    class StoredFile {
-        +Long fileId
-        +Long uploaderId
-        +FileUsage fileUsage
-        +String storagePath
-        +String mimeType
-        +Long size
-        +LocalDateTime createdAt
-    }
-
-    class Evaluation {
-        +Long id
-        +Long reviewerId
-        +Long revieweeId
-        +BusinessType businessType
-        +Long businessId
-        +PickupParticipantRole revieweeRoleInBusiness
-        +RatingLevel ratingLevel
-        +String content
-        +LocalDateTime createdAt
-    }
-
-    class NotificationRecord {
-        +Long id
-        +Long receiverId
-        +NotificationType type
-        +String content
-        +Boolean read
-        +markRead()
-    }
-```
+> Mermaid 源码：[core-domain-class.mmd](asset/core-domain-class.mmd)
 
 ### 1.2 核心服务与模块协作类图
 
-```mermaid
-classDiagram
-    AuthService --> User
-    AuthService --> CurrentUserContext : 登录后生成请求上下文
+![核心服务与模块协作类图](asset/service-collaboration-class.svg)
 
-    UserService --> User
-    UserService --> FileStorageService : 通过fileId读取头像/认证材料
-    UserService --> VerificationReviewService : 创建实名审核记录
-
-    VerificationReviewService --> VerificationReview
-    VerificationReviewService --> UserService : 回写认证状态
-    VerificationReviewService --> UserService : 读取实名信息和认证材料
-    VerificationReviewService --> NotificationService : 认证结果通知
-
-    PickupService --> PickupRequest
-    PickupService --> UserService : 获取认证状态/公开摘要
-    PickupService --> PointService : 发布扣减/取消退回/完成转移
-    PickupService --> FileStorageService : 取件凭证/完成凭证
-    PickupService --> NotificationService : 接单/凭证/完成通知
-    FileStorageService --> StoredFile : 维护文件元数据和上传溯源
-
-    UserService --> PointService : 认证赠送/每日签到
-    PointService --> User : 维护积分余额
-    PointService --> PointTransaction : 写入积分流水
-
-    EvaluationService --> Evaluation
-    EvaluationService --> PickupService : 查询评价上下文
-    EvaluationService --> NotificationService : 收到评价通知
-
-    NotificationService --> NotificationRecord
-
-    class AuthService {
-        +register(username, password)
-        +login(username, password)
-        +parseToken(token)
-    }
-
-    class UserService {
-        +getCurrentUser(userId)
-        +getUserSummary(userId)
-        +loadAvatar(userId)
-        +updateProfile(userId, command)
-        +submitVerification(userId, studentId, realName, materialFileId)
-        +updateUserAuthStatus(userId, authStatus, reason)
-        +ensureCertified(userId)
-    }
-
-    class VerificationReviewService {
-        +createVerificationReview(userId)
-        +queryPendingReviews(pageQuery)
-        +approveReview(reviewId, adminId)
-        +rejectReview(reviewId, adminId, reason)
-    }
-
-    class PickupService {
-        +publishPickup(command, currentUserId)
-        +queryHall(campus, rewardType, pageQuery)
-        +queryDetail(pickupId, currentUserId)
-        +acceptPickup(pickupId, acceptorId)
-        +uploadCompletionProof(pickupId, acceptorId, fileId)
-        +confirmComplete(pickupId, publisherId)
-        +cancelPickup(pickupId, publisherId, reason)
-        +expireOpenPickups(now)
-        +queryMyPublished(userId, status, pageQuery)
-        +queryMyAccepted(userId, status, pageQuery)
-        +queryPickupEvaluationContext(pickupId)
-    }
-
-    class PointService {
-        +grantInitialPoints(userId)
-        +checkIn(userId)
-        +getBalance(userId)
-        +spendForPublish(userId, amount, pickupId)
-        +refundForCancel(userId, amount, pickupId)
-        +transferOnComplete(payerId, receiverId, amount, pickupId)
-        +queryTransactions(userId, type, pageQuery)
-    }
-
-    class FileStorageService {
-        +uploadImage(file, uploaderId, fileUsage)
-        +loadFile(fileId)
-        +validateImage(file)
-    }
-
-    class EvaluationService {
-        +queryEvaluationEligibility(pickupId, reviewerId)
-        +submitEvaluation(pickupId, reviewerId, revieweeId, ratingLevel, content)
-        +queryUserRatingSummary(userId)
-        +queryUserEvaluations(userId, revieweeRoleInBusiness, pageQuery)
-        +queryEvaluationDetail(evaluationId)
-    }
-
-    class NotificationService {
-        +createNotice(receiverId, type, content)
-        +queryMyNotices(userId, pageQuery)
-        +countUnread(userId)
-        +markRead(noticeId, userId)
-    }
-```
+> Mermaid 源码：[service-collaboration-class.mmd](asset/service-collaboration-class.mmd)
 
 ### 1.3 核心类详细定义
 
@@ -637,46 +434,9 @@ class Task {
 
 **应用场景：** MVP 中存在多个图片上传场景，包括头像、实名认证材料、取件凭证和完成凭证。它们都需要执行类似流程：校验格式、校验大小、生成存储路径、保存本地文件、写入文件元数据、返回 `fileId`；不同图片类别在大小限制、保存目录、文件类别标记等方面可能不同。
 
-```mermaid
-classDiagram
-    AbstractImageUploadProcessor <|-- AvatarUploadProcessor
-    AbstractImageUploadProcessor <|-- VerificationMaterialUploadProcessor
-    AbstractImageUploadProcessor <|-- PickupCredentialUploadProcessor
-    AbstractImageUploadProcessor <|-- CompletionProofUploadProcessor
+![图片上传处理流程类图](asset/file-upload-template-class.svg)
 
-    class AbstractImageUploadProcessor {
-        +upload(file, uploaderId, fileUsage)
-        #validateFormat(file)
-        #validateSize(file)
-        #generateStoragePath(file)
-        #saveToLocal(file, path)
-        #saveMetadata(file, path, uploaderId, fileUsage)
-    }
-
-    class AvatarUploadProcessor {
-        #validateSize(file)
-        #generateStoragePath(file)
-        #saveMetadata(file, path, uploaderId, fileUsage)
-    }
-
-    class VerificationMaterialUploadProcessor {
-        #validateSize(file)
-        #generateStoragePath(file)
-        #saveMetadata(file, path, uploaderId, fileUsage)
-    }
-
-    class PickupCredentialUploadProcessor {
-        #validateSize(file)
-        #generateStoragePath(file)
-        #saveMetadata(file, path, uploaderId, fileUsage)
-    }
-
-    class CompletionProofUploadProcessor {
-        #validateSize(file)
-        #generateStoragePath(file)
-        #saveMetadata(file, path, uploaderId, fileUsage)
-    }
-```
+> Mermaid 源码：[file-upload-template-class.mmd](asset/file-upload-template-class.mmd)
 
 **为什么用：**
 
@@ -698,20 +458,9 @@ classDiagram
 
 **类结构：**
 
-```mermaid
-classDiagram
-    PointService --> User : 更新余额
-    PointService --> PointTransaction : 写入流水
+![积分变动处理流程类图](asset/point-transaction-template-class.svg)
 
-    class PointService {
-        +grantInitialPoints(userId)
-        +checkIn(userId)
-        +spendForPublish(userId, amount, pickupId)
-        +refundForCancel(userId, amount, pickupId)
-        +transferOnComplete(payerId, receiverId, amount, pickupId)
-        #applyChange(userId, type, amount, relatedPickupId)
-    }
-```
+> Mermaid 源码：[point-transaction-template-class.mmd](asset/point-transaction-template-class.mmd)
 
 **为什么用：**
 

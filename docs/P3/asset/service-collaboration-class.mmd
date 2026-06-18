@@ -1,0 +1,97 @@
+classDiagram
+    AuthService --> User
+    AuthService --> CurrentUserContext : 登录后生成请求上下文
+
+    UserService --> User
+    UserService --> FileStorageService : 通过fileId读取头像/认证材料
+    UserService --> VerificationReviewService : 创建实名审核记录
+
+    VerificationReviewService --> VerificationReview
+    VerificationReviewService --> UserService : 回写认证状态
+    VerificationReviewService --> UserService : 读取实名信息和认证材料
+    VerificationReviewService --> NotificationService : 认证结果通知
+
+    PickupService --> PickupRequest
+    PickupService --> UserService : 获取认证状态/公开摘要
+    PickupService --> PointService : 发布扣减/取消退回/完成转移
+    PickupService --> FileStorageService : 取件凭证/完成凭证
+    PickupService --> NotificationService : 接单/凭证/完成通知
+    FileStorageService --> StoredFile : 维护文件元数据和上传溯源
+
+    UserService --> PointService : 认证赠送/每日签到
+    PointService --> User : 维护积分余额
+    PointService --> PointTransaction : 写入积分流水
+
+    EvaluationService --> Evaluation
+    EvaluationService --> PickupService : 查询评价上下文
+    EvaluationService --> NotificationService : 收到评价通知
+
+    NotificationService --> NotificationRecord
+
+    class AuthService {
+        +register(username, password)
+        +login(username, password)
+        +parseToken(token)
+    }
+
+    class UserService {
+        +getCurrentUser(userId)
+        +getUserSummary(userId)
+        +loadAvatar(userId)
+        +updateProfile(userId, command)
+        +submitVerification(userId, studentId, realName, materialFileId)
+        +updateUserAuthStatus(userId, authStatus, reason)
+        +ensureCertified(userId)
+    }
+
+    class VerificationReviewService {
+        +createVerificationReview(userId)
+        +queryPendingReviews(pageQuery)
+        +approveReview(reviewId, adminId)
+        +rejectReview(reviewId, adminId, reason)
+    }
+
+    class PickupService {
+        +publishPickup(command, currentUserId)
+        +queryHall(campus, rewardType, pageQuery)
+        +queryDetail(pickupId, currentUserId)
+        +acceptPickup(pickupId, acceptorId)
+        +uploadCompletionProof(pickupId, acceptorId, fileId)
+        +confirmComplete(pickupId, publisherId)
+        +cancelPickup(pickupId, publisherId, reason)
+        +expireOpenPickups(now)
+        +queryMyPublished(userId, status, pageQuery)
+        +queryMyAccepted(userId, status, pageQuery)
+        +queryPickupEvaluationContext(pickupId)
+    }
+
+    class PointService {
+        +grantInitialPoints(userId)
+        +checkIn(userId)
+        +getBalance(userId)
+        +spendForPublish(userId, amount, pickupId)
+        +refundForCancel(userId, amount, pickupId)
+        +transferOnComplete(payerId, receiverId, amount, pickupId)
+        +queryTransactions(userId, type, pageQuery)
+    }
+
+    class FileStorageService {
+        +uploadImage(file, uploaderId, fileUsage)
+        +loadFile(fileId)
+        +validateImage(file)
+    }
+
+    class EvaluationService {
+        +queryEvaluationEligibility(pickupId, reviewerId)
+        +submitEvaluation(pickupId, reviewerId, revieweeId, ratingLevel, content)
+        +queryUserRatingSummary(userId)
+        +queryUserEvaluations(userId, revieweeRoleInBusiness, pageQuery)
+        +queryEvaluationDetail(evaluationId)
+    }
+
+    class NotificationService {
+        +createNotice(receiverId, type, content)
+        +queryMyNotices(userId, pageQuery)
+        +countUnread(userId)
+        +markRead(noticeId, userId)
+    }

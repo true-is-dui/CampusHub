@@ -1,0 +1,108 @@
+classDiagram
+    User "1" --> "*" PickupRequest : 发布
+    User "1" --> "*" VerificationReview : 提交实名审核
+
+    PickupRequest ..> StoredFile : 通过fileId引用凭证文件
+    Evaluation ..> PickupRequest : businessType=PICKUP_REQUEST,businessId
+    User "1" --> "*" Evaluation : 发出/收到
+    User "1" --> "*" NotificationRecord : 接收
+    User "1" --> "*" PointTransaction : 拥有积分流水
+    PointTransaction ..> PickupRequest : relatedPickupId
+
+    class User {
+        +Long id
+        +String username
+        +String passwordHash
+        +String studentId
+        +String realName
+        +String nickname
+        +Long avatarFileId
+        +Long verificationFileId
+        +AuthStatus authStatus
+        +UserRole role
+        +Long pointBalance
+        +LocalDate lastCheckInDate
+        +markAuthSubmitted(studentId, realName, fileId)
+        +markAuthApproved()
+        +markAuthRejected(reason)
+        +updateProfile(nickname, avatarFileId, college, contact)
+        +canParticipatePickup()
+        +deductPoints(amount)
+        +addPoints(amount)
+    }
+
+    class VerificationReview {
+        +Long id
+        +Long userId
+        +ReviewStatus status
+        +Long reviewerId
+        +String rejectReason
+        +markApproved(reviewerId)
+        +markRejected(reviewerId, reason)
+    }
+
+    class PickupRequest {
+        +Long id
+        +Long publisherId
+        +Long acceptorId
+        +String campus
+        +String pickupLocation
+        +String deliveryLocation
+        +String itemDescription
+        +Long pickupCredentialFileId
+        +RewardType rewardType
+        +BigDecimal rewardAmount
+        +PickupStatus status
+        +LocalDateTime acceptDeadline
+        +Long completionProofFileId
+        +markWaitingAccept()
+        +markAccepted(acceptorId)
+        +recordCompletionProof(fileId)
+        +markCompleted()
+        +markCancelled(reason)
+        +canViewPickupCredential(userId)
+        +isHallVisible()
+        +isPublisher(userId)
+        +isAcceptor(userId)
+    }
+
+    class PointTransaction {
+        +Long id
+        +Long userId
+        +PointTransactionType type
+        +Long amount
+        +Long balanceAfter
+        +Long relatedPickupId
+        +LocalDateTime createdAt
+    }
+
+    class StoredFile {
+        +Long fileId
+        +Long uploaderId
+        +FileUsage fileUsage
+        +String storagePath
+        +String mimeType
+        +Long size
+        +LocalDateTime createdAt
+    }
+
+    class Evaluation {
+        +Long id
+        +Long reviewerId
+        +Long revieweeId
+        +BusinessType businessType
+        +Long businessId
+        +PickupParticipantRole revieweeRoleInBusiness
+        +RatingLevel ratingLevel
+        +String content
+        +LocalDateTime createdAt
+    }
+
+    class NotificationRecord {
+        +Long id
+        +Long receiverId
+        +NotificationType type
+        +String content
+        +Boolean read
+        +markRead()
+    }

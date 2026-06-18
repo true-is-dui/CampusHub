@@ -1,0 +1,38 @@
+classDiagram
+    AbstractImageUploadProcessor <|-- AvatarUploadProcessor
+    AbstractImageUploadProcessor <|-- VerificationMaterialUploadProcessor
+    AbstractImageUploadProcessor <|-- PickupCredentialUploadProcessor
+    AbstractImageUploadProcessor <|-- CompletionProofUploadProcessor
+
+    class AbstractImageUploadProcessor {
+        +upload(file, uploaderId, fileUsage)
+        #validateFormat(file)
+        #validateSize(file)
+        #generateStoragePath(file)
+        #saveToLocal(file, path)
+        #saveMetadata(file, path, uploaderId, fileUsage)
+    }
+
+    class AvatarUploadProcessor {
+        #validateSize(file)
+        #generateStoragePath(file)
+        #saveMetadata(file, path, uploaderId, fileUsage)
+    }
+
+    class VerificationMaterialUploadProcessor {
+        #validateSize(file)
+        #generateStoragePath(file)
+        #saveMetadata(file, path, uploaderId, fileUsage)
+    }
+
+    class PickupCredentialUploadProcessor {
+        #validateSize(file)
+        #generateStoragePath(file)
+        #saveMetadata(file, path, uploaderId, fileUsage)
+    }
+
+    class CompletionProofUploadProcessor {
+        #validateSize(file)
+        #generateStoragePath(file)
+        #saveMetadata(file, path, uploaderId, fileUsage)
+    }
