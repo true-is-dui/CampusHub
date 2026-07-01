@@ -125,7 +125,7 @@ SOLID 修正后的结果：
 | File Access | 头像、认证材料、取件凭证、完成凭证分别通过用户、审核、代取等业务接口上传或读取 | 文件能力不作为独立通用资源开放；访问权限由对应业务模块控制 |
 | Pickup Requests | `GET /pickup-requests`、`POST /pickup-requests`、`GET /pickup-requests/{pickupId}`、`GET /pickup-requests/{pickupId}/credential`、`POST /pickup-requests/{pickupId}/accept`、`POST /pickup-requests/{pickupId}/completion-proof`、`GET /pickup-requests/{pickupId}/completion-proof`、`POST /pickup-requests/{pickupId}/completion-confirmation`、`POST /pickup-requests/{pickupId}/cancel`、`GET /users/me/pickup-requests` | 覆盖发布、列表、详情、接单、完成凭证、确认完成、取消、我的发布、我的接单 |
 | Points | `GET /users/me/point-balance`、`POST /users/me/check-in`、`GET /users/me/point-transactions` | 查询积分余额、每日签到、积分流水（支持按类型筛选）；积分为平台内虚拟资产，不可充值提现 |
-| Evaluations | `POST /pickup-requests/{pickupId}/evaluations`、`GET /pickup-requests/{pickupId}/evaluation-eligibility`、`GET /users/{userId}/rating-summary`、`GET /users/{userId}/evaluations` | 代取完成后双方评价，支持评价资格查询、评价列表和好评率摘要 |
+| Evaluations | `POST /pickup-requests/{pickupId}/evaluations`、`GET /pickup-requests/{pickupId}/evaluation-eligibility`、`GET /pickup-requests/{pickupId}/evaluations`、`GET /pickup-requests/{pickupId}/received-evaluation`、`GET /users/{userId}/rating-summary`、`GET /users/{userId}/evaluations` | 代取完成后双方评价，支持评价资格查询、代取评价列表、我收到的评价、用户评价列表和好评率摘要 |
 | Notifications | `GET /users/me/notifications`、`GET /users/me/notifications/unread-count`、`POST /users/me/notifications/{notificationId}/read` | 站内通知采用 HTTP 查询/轮询方式，不使用 WebSocket |
 
 有偿代取的关键 API 规则：

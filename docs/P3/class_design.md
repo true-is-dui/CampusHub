@@ -57,7 +57,7 @@
 | realName | String | 真实姓名，仅用于实名认证和管理员审核 |
 | nickname | String | 公开展示昵称，可修改，可重复 |
 | avatarFileId | Long | 头像文件标识 |
-| verificationFileId | Long | 实名认证材料照片文件标识；MVP 支持一张校园卡或学生证照片 |
+| phone | String | 手机号，选填资料字段，MVP 不用于短信登录 |
 | college | String | 学院，选填 |
 | contact | String | 联系方式，选填；未填写时不展示 |
 | authStatus | AuthStatus(Enum) | 未认证/审核中/已通过/已驳回 |
@@ -68,12 +68,12 @@
 
 | 方法 | 说明 |
 |------|------|
-| markAuthSubmitted(studentId, realName, verificationFileId) | 保存实名信息和认证材料，进入审核中 |
-| markAuthApproved() | 认证状态变为已通过 |
-| markAuthRejected(reason) | 认证状态变为已驳回 |
+| markAuthSubmitted() | 认证状态置为审核中 |
+| markAuthApproved(studentId, realName) | 审核通过，回写实名信息并置认证状态为已通过 |
+| markAuthRejected() | 认证状态变为已驳回 |
 | updateProfile(nickname, avatarFileId, college, contact) | 更新公开资料 |
 | canParticipatePickup() | 判断用户认证状态是否允许参与代取服务；供服务层内部校验使用 |
-| deductPoints(amount) | 从积分余额中扣减；余额不足时由服务层拦截，供发布有报酬代取使用 |
+| deductPoints(amount) | 从积分余额中扣减；余额不足时抛异常，供发布有报酬代取使用 |
 | addPoints(amount) | 向积分余额中增加；供签到、认证赠送、取消退回、完成入账使用 |
 
 #### CurrentUserContext（当前用户上下文）
@@ -102,13 +102,17 @@
 |------|------|------|
 | id | Long | 审核记录主键 |
 | userId | Long | 申请认证的用户 ID |
+| materialFileId | Long | 本次认证材料文件 ID |
+| submittedStudentId | String | 本次申请提交的学号快照 |
+| submittedRealName | String | 本次申请提交的真实姓名快照 |
 | status | ReviewStatus(Enum) | 待审核/已通过/已驳回 |
 | reviewerId | Long | 处理管理员 ID |
 | rejectReason | String | 驳回原因 |
-| createdAt | LocalDateTime | 创建时间 |
+| submittedAt | LocalDateTime | 提交时间 |
 | reviewedAt | LocalDateTime | 审核时间 |
+| createdAt | LocalDateTime | 创建时间 |
 
-> 实名信息和认证材料归用户模块维护，`VerificationReview` 只保存审核流程元数据。管理员查看审核详情时，实名认证审核服务通过 `UserService` 读取用户模块中的 `studentId`、`realName` 和 `verificationFileId`，再由用户模块按权限读取认证材料文件。
+> `VerificationReview` 保存本次实名认证申请的材料文件 ID 和学号/姓名快照，用于管理员审核和历史追溯。管理员查看审核详情时，实名认证审核服务完成管理员鉴权后按 `materialFileId` 调用 `FileStorageService.loadFile` 读取材料文件。审核通过后，实名信息经 `UserService` 回写到用户账户；用户账户不保存认证材料文件 ID。
 
 | 方法 | 说明 |
 |------|------|
@@ -241,7 +245,9 @@
 | contentPreview | String | 评价内容预览 |
 | createdAt | LocalDateTime | 评价时间 |
 
-#### EvaluationDetail（评价详情，Should）
+#### ReceivedEvaluationDetail（我收到的评价详情，Should）
+
+`queryReceivedEvaluation(pickupId, currentUserId)` 返回当前用户在某代取服务中收到的评价详情；`queryPickupEvaluations` 返回的列表项结构与之类似（`PickupEvaluationItem`）。
 
 | 属性 | 类型 | 说明 |
 |------|------|------|
@@ -275,30 +281,42 @@
 
 | 方法 | 说明 |
 |------|------|
-| register(username, password) | 用户名密码注册，校验用户名唯一，保存密码哈希 |
-| login(username, password) | 用户名密码登录，用户存在且密码正确时签发 JWT |
-| parseToken(token) | 解析 JWT 并生成 `CurrentUserContext` |
+| register(username, rawPassword) | 用户名密码注册，校验用户名唯一，保存密码哈希 |
+| login(username, rawPassword) | 用户名密码登录，用户存在且密码正确时签发 JWT，返回会话信息 |
+
+> JWT 的解析和请求身份还原由拦截器基础设施（`JwtUtil` + `AuthInterceptor`）完成，不作为 `AuthService` 的业务方法。
 
 #### UserService（用户服务）
 
+`UserService` 是用户表读写的 owner service：其他模块不直接注入 `UserMapper`，用户资料、认证状态和积分余额的读取/变更均经此服务的领域方法收口。
+
 | 方法 | 说明 |
 |------|------|
-| getCurrentUser(userId) | 查询当前用户完整信息 |
-| getUserSummary(userId) | 返回公开用户摘要，不包含实名信息 |
+| getCurrentUser(userId) | 查询当前用户完整信息（含积分余额） |
+| getPublicProfile(userId) | 返回公开用户主页信息，不包含实名信息 |
+| getUserBriefs(userIds) | 批量返回公开用户摘要（userId/username/nickname），供大厅、评价等展示 |
 | loadAvatar(userId) | 通过用户模块读取头像文件；内部根据 `avatarFileId` 调用文件存储模块 |
-| updateProfile(userId, command) | 编辑头像、昵称、学院和联系方式 |
-| submitVerification(userId, studentId, realName, materialFileId) | 保存实名信息和认证材料，并创建仅关联 `userId` 的实名认证审核记录 |
-| updateUserAuthStatus(userId, authStatus, reason) | 管理员审核后回写用户认证状态 |
+| updateProfile(userId, nickname, avatar, college, contact) | 编辑头像、昵称、学院和联系方式（部分更新） |
+| isStudentIdCertified(studentId, excludeUserId) | 校验学号是否已被其他账号认证占用 |
+| markVerificationSubmitted(userId) | 提交认证后置为审核中 |
+| markVerificationApproved(userId, studentId, realName) | 审核通过后回写实名信息和认证状态 |
+| markVerificationRejected(userId) | 审核驳回后回写认证状态 |
 | ensureCertified(userId) | 校验用户是否已认证且账号正常 |
+| getPointBalance(userId) | 读取用户积分余额 |
+| applyPointChange(userId, delta, checkInDate) | 账户级积分变动原语：读用户→改余额（领域方法）→条件更新落库→返回变动后余额；`checkInDate` 非空表示签到变动，带旧签到日期条件去重。余额不足、当日重复签到、并发冲突在此翻译为业务异常 |
+
+> 用户实名信息（`studentId`、`realName`、认证材料）不通过公开接口暴露；管理员审核时经实名认证审核服务读取。积分余额字段物理上存于 `users` 表，账户级写入（条件更新、余额非负、签到去重）由 `UserService` 收口，「为什么变、变多少、写什么流水」的积分业务语义则归 `PointService`。
 
 #### VerificationReviewService（实名认证审核服务）
 
+「提交实名认证」的业务本质是创建审核记录，故该入口归 `VerificationReviewService`（Controller 层 `POST /users/me/verification` 委托过来）。依赖方向为单向：`VerificationReviewService → UserService`（读取/回写认证状态），不存在反向依赖。
+
 | 方法 | 说明 |
 |------|------|
-| createVerificationReview(userId) | 用户提交认证后创建待审核记录；审核记录不复制实名字段和材料文件标识 |
-| queryPendingReviews(pageQuery) | 管理员分页查询待审核实名认证申请 |
-| approveReview(reviewId, adminId) | 审核通过，回写用户认证状态，并创建通知 |
-| rejectReview(reviewId, adminId, reason) | 审核驳回，回写用户认证状态和原因，并创建通知 |
+| submitVerification(userId, studentId, realName, verificationImage) | 用户提交实名认证：保存认证材料文件、创建待审核记录，并经 `UserService` 置认证状态为审核中 |
+| queryReviews(admin, status, pageQuery) | 管理员分页查询实名认证申请，可按审核状态筛选 |
+| handleReview(admin, reviewId, request) | 管理员审核通过或驳回：回写用户认证状态；通过时经 `PointService` 赠送初始积分，并创建认证结果通知 |
+| loadReviewImage(admin, reviewId) | 管理员在完成鉴权后读取该审核记录的认证材料文件 |
 
 #### PickupService（代取服务）
 
@@ -306,17 +324,20 @@
 
 | 方法 | 说明 |
 |------|------|
-| publishPickup(command, currentUserId) | 发布代取服务；认证用户才能发布。有报酬服务调用 `PointService.spendForPublish` 扣减发布方积分后进入待接单（余额不足则发布失败）；无报酬服务直接进入待接单 |
+| publishPickup(currentUserId, request, pickupCredential) | 发布代取服务；认证用户才能发布。有报酬服务调用 `PointService.spendForPublish` 扣减发布方积分后进入待接单（余额不足则发布失败）；无报酬服务直接进入待接单 |
 | queryHall(campus, rewardType, pageQuery) | 查询代取需求大厅，只返回待接单服务，支持校区和报酬类型筛选，按发布时间倒序 |
-| queryDetail(pickupId, currentUserId) | 查询详情；接单前不返回取件凭证 |
-| acceptPickup(pickupId, acceptorId) | 认证用户接单；接单方不得是发布方；成功后进入进行中 |
-| uploadCompletionProof(pickupId, acceptorId, fileId) | 接单方上传单张完成凭证；MVP 阶段完成凭证限定为一张图片 |
-| confirmComplete(pickupId, publisherId) | 发布方确认完成；有报酬服务调用 `PointService.transferOnComplete` 将积分转给接单方，无报酬服务不处理积分 |
-| cancelPickup(pickupId, publisherId, reason) | 发布方取消待接单服务；有报酬服务调用 `PointService.refundForCancel` 退回发布方积分 |
-| expireOpenPickups(now) | 扫描超过接单截止时间仍无人接单的服务并取消 |
-| queryMyPublished(userId, status, pageQuery) | 查询我的发布，支持总览和按状态分类，返回 `PickupSummary` 列表 |
-| queryMyAccepted(userId, status, pageQuery) | 查询我的接单，支持总览和按状态分类，返回 `PickupSummary` 列表 |
+| queryDetail(pickupId) | 查询详情；接单前不返回取件凭证 |
+| loadPickupCredential(pickupId, currentUserId) | 接单方在接单后读取取件凭证图片 |
+| acceptPickup(pickupId, currentUserId) | 认证用户接单；接单方不得是发布方；成功后进入进行中 |
+| uploadCompletionProof(pickupId, currentUserId, proofImage) | 接单方上传单张完成凭证图片；MVP 阶段完成凭证限定为一张图片 |
+| loadCompletionProof(pickupId, currentUserId) | 发布方/接单方读取完成凭证图片 |
+| confirmComplete(pickupId, currentUserId) | 发布方确认完成；有报酬服务调用 `PointService.transferOnComplete` 将积分转给接单方，无报酬服务不处理积分 |
+| cancelPickup(pickupId, currentUserId, cancelDetail) | 发布方取消待接单服务；有报酬服务调用 `PointService.refundForCancel` 退回发布方积分 |
+| queryMyPublished(currentUserId, status, pageQuery) | 查询我的发布，支持总览和按状态分类，返回 `PickupSummary` 列表 |
+| queryMyAccepted(currentUserId, status, pageQuery) | 查询我的接单，支持总览和按状态分类，返回 `PickupSummary` 列表 |
 | queryPickupEvaluationContext(pickupId) | 向评价模块提供发布方、接单方和服务状态 |
+
+> 接单截止超时取消采用惰性校验：用户查询大厅、查看详情、接单或取消时，若发现已过 `accept_deadline` 仍待接单，先流转为已取消再返回，不额外引入定时扫描方法。
 
 > 代取服务不保存评价 ID 列表。评价查询、评价统计、评价详情展示和重复评价校验均通过 `Evaluation.businessType + Evaluation.businessId` 定位业务对象；当前 MVP 中 `businessType=PICKUP_REQUEST`，`businessId` 为代取服务 ID。
 
@@ -334,38 +355,39 @@
 | transferOnComplete(payerId, receiverId, amount, pickupId) | 确认完成时将积分从发布方转入接单方，写双方流水（`SPEND` 已在发布时记，完成记 `INCOME_COMPLETE`） |
 | queryTransactions(userId, type, pageQuery) | 分页查询用户积分流水，可按流水类型筛选 |
 
-> 积分余额存于 `User.pointBalance`，`PointService` 在每次变动时同步更新余额并写入 `PointTransaction.balanceAfter`。积分赠送、签到的去重和发布扣减的余额校验均在业务层完成；积分不足、当日重复签到等失败不写流水，由业务层返回业务错误。`PointService` 不理解代取业务状态，代取状态仍由 `PickupService` / `PickupRequest` 维护，`relatedPickupId` 仅用于流水溯源。
+> 积分余额存于 `User.pointBalance`。账户级余额写入（条件更新、余额非负校验、签到日期去重）收口到 `UserService.applyPointChange`，`PointService` 调用该原语拿到变动后余额后写 `PointTransaction.balanceAfter`——两步在同一事务内完成，保证余额与流水一致。积分不足、当日重复签到等失败不写流水，由 owner service 抛出业务错误。`PointService` 不理解代取业务状态，代取状态仍由 `PickupService` / `PickupRequest` 维护，`relatedPickupId` 仅用于流水溯源。
 
 #### FileStorageService（文件存储服务）
 
 | 方法 | 说明 |
 |------|------|
-| uploadImage(file, uploaderId, fileUsage) | 校验 JPG/PNG 和大小限制，保存本地文件，记录上传者和文件用途溯源信息，并返回文件标识 |
-| loadFile(fileId) | 根据文件标识读取文件内容和 MIME 类型 |
-| validateImage(file) | 校验图片格式和大小 |
+| uploadImage(file, uploaderId, fileUsage, businessType, businessId) | 校验 JPG/PNG 和大小限制，保存本地文件，记录上传者、文件用途和业务溯源信息，并返回文件标识 |
+| loadFile(fileId) | 根据文件标识读取文件内容和 MIME 类型（受信方法，调用方须先鉴权） |
+| updateBusinessTrace(fileId, businessType, businessId) | 上传后回填文件的业务溯源信息 |
 
-> 图片上传处理流程可由第 3.1 节的模板方法结构实现。业务模块必须先完成权限和状态校验，再选择头像、认证材料、取件凭证或完成凭证对应的上传处理器；文件模块保存上传溯源信息，但不判断用户是否有权查看或使用某个业务文件。
+> 图片格式和大小校验由无状态工具 `ImageValidator` 完成，不作为服务对外方法。图片上传处理流程可由第 3.1 节的模板方法结构实现。业务模块必须先完成权限和状态校验，再选择头像、认证材料、取件凭证或完成凭证对应的上传处理器；文件模块保存上传溯源信息，但不判断用户是否有权查看或使用某个业务文件。
 
 #### EvaluationService（评价服务，Should）
 
 | 方法 | 说明 |
 |------|------|
-| queryEvaluationEligibility(pickupId, reviewerId) | 查询当前用户对某代取服务是否可评价 |
-| submitEvaluation(pickupId, reviewerId, revieweeId, ratingLevel, content) | 提交评价；后端重新校验服务已完成、评价者和被评价者均属于该服务，根据被评价者在该代取服务中的身份写入 `revieweeRoleInBusiness`，并校验同一个业务对象中同一评价者不可重复评价；创建评价后可生成收到评价通知 |
+| queryEvaluationEligibility(pickupId, currentUserId) | 查询当前用户对某代取服务是否可评价 |
+| submitEvaluation(pickupId, currentUserId, request) | 提交评价；后端重新校验服务已完成、当前用户属于该服务参与者，并**根据 pickupId 和当前用户后端推导被评价人及其角色**（写入 `revieweeRoleInBusiness`），校验同一业务对象中同一评价者不可重复评价；创建评价后生成收到评价通知 |
 | queryUserRatingSummary(userId) | 按被评价用户在代取服务中的角色，分别统计其作为发布方和作为接单方收到评价的好评率、好评数、中评数、差评数和评价总数 |
-| queryUserEvaluations(userId, revieweeRoleInBusiness, pageQuery) | 分页查询用户收到的历史评价总览，可按被评价者在业务中的角色筛选展示，返回 `EvaluationHistorySummary` 列表 |
-| queryEvaluationDetail(evaluationId) | 查询单条评价详情，返回内嵌 `PickupSummary` 的 `EvaluationDetail` |
+| queryUserEvaluations(userId, pageQuery) | 分页查询用户收到的历史评价总览，返回 `EvaluationHistorySummary` 列表 |
+| queryReceivedEvaluation(pickupId, currentUserId) | 查询当前用户在某代取服务中收到的评价 |
+| queryPickupEvaluations(pickupId, currentUserId) | 查询某已完成代取服务上双方的评价列表 |
 
-> 当前 MVP 可通过 `businessType + businessId + reviewerId` 唯一约束避免重复评价，不再要求代取服务记录评价 ID。
+> 当前 MVP 通过 `businessType + businessId + reviewerId` 唯一约束避免重复评价，不再要求代取服务记录评价 ID。被评价人由后端按 pickupId + 当前用户推导，不由前端传入。评价详情按业务对象和参与者维度提供（`queryReceivedEvaluation` / `queryPickupEvaluations`），不开放按 `evaluationId` 的公开单条详情接口——公开会泄露列表刻意隐藏的业务背景，非公开则对信誉展示的主要受众（路人）无价值。
 
 #### NotificationService（站内通知服务，Should）
 
 | 方法 | 说明 |
 |------|------|
-| createNotice(receiverId, type, content) | 在认证结果、接单、完成凭证、确认完成和收到评价时创建通知 |
+| createNotice(receiverId, type, title, content, businessType, businessId) | 在认证结果、接单、完成凭证、确认完成和收到评价时创建通知；单条 insert 不抛异常、不阻断主流程 |
 | queryMyNotices(userId, pageQuery) | 分页查询我的通知 |
 | countUnread(userId) | 查询未读通知数量 |
-| markRead(noticeId, userId) | 标记指定通知为已读 |
+| markRead(notificationId, userId) | 标记指定通知为已读 |
 
 ### 1.5 可选功能扩展说明
 
@@ -480,15 +502,15 @@ class Task {
 | FR-UM-01 | `AuthService.register/login`、`User.username/passwordHash` |
 | FR-UM-02 | `UserService.updateProfile`、`User.avatarFileId/college/contact` |
 | FR-UM-03 | `UserSummary` 隔离公开字段；实名信息仅用户模块和实名认证审核流程可访问 |
-| FR-UM-04~07 | `User.submitVerification`、`VerificationReviewService`、`User.authStatus` |
+| FR-UM-04~07 | `VerificationReviewService.submitVerification/queryReviews/handleReview`、`UserService.markVerificationSubmitted/Approved/Rejected`、`User.authStatus` |
 | FR-UM-08 | `UserService.ensureCertified`、`CurrentUserContext` |
 | 积分赠送与签到 | `PointService.grantInitialPoints`（认证赠送 100，每学号一次）、`PointService.checkIn`（每日签到 +5）、`User.pointBalance/lastCheckInDate` |
 | FR-HALL-01~06 | `PickupService.queryHall`、`PickupRequest.isHallVisible`、`PickupStatus.WAITING_ACCEPT` |
 | FR-PU-01~02 | `PickupRequest` 字段和 `publishPickup` 校验 |
 | FR-PU-03~04 | `PointService.spendForPublish(userId, amount, pickupId)`、`User.deductPoints`、`PickupRequest.markWaitingAccept` |
 | FR-PU-05~06 | `PickupService.acceptPickup`、`PickupRequest.canViewPickupCredential` |
-| FR-PU-07~08 | `uploadCompletionProof(pickupId, acceptorId, fileId)`、`PickupRequest.completionProofFileId`、`confirmComplete`、`PointService.transferOnComplete` |
-| FR-PU-09~11 | `PickupStatus` 状态校验、`cancelPickup`、`PointService.refundForCancel`、`expireOpenPickups` |
+| FR-PU-07~08 | `uploadCompletionProof(pickupId, currentUserId, proofImage)`、`PickupRequest.completionProofFileId`、`confirmComplete`、`PointService.transferOnComplete` |
+| FR-PU-09~11 | `PickupStatus` 状态校验、`cancelPickup`、`PointService.refundForCancel`、接单截止超时惰性取消 |
 | FR-PU-12 | `PickupSummary`、`queryMyPublished`、`queryMyAccepted` |
-| FR-CR-01~04 | `Evaluation.businessType/businessId/revieweeRoleInBusiness`、`RatingSummary.publisherRoleSummary/acceptorRoleSummary`、`RatingRoleSummary.revieweeRoleInBusiness`、`EvaluationHistorySummary`、`EvaluationDetail`、`EvaluationService`，作为 Should 模块；`EvaluationDetail` 复用 `PickupSummary` 展示关联服务背景 |
+| FR-CR-01~04 | `Evaluation.businessType/businessId/revieweeRoleInBusiness`、`RatingSummary.publisherRoleSummary/acceptorRoleSummary`、`RatingRoleSummary.revieweeRoleInBusiness`、`EvaluationHistorySummary`、`ReceivedEvaluationDetail`、`EvaluationService`，作为 Should 模块；`ReceivedEvaluationDetail` 复用 `PickupSummary` 展示关联服务背景 |
 | FR-NT-01~02 | `NotificationRecord`、`NotificationService`，作为 Should 模块 |

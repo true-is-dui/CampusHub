@@ -3,6 +3,7 @@ classDiagram
     User "1" --> "*" VerificationReview : 提交实名审核
 
     PickupRequest ..> StoredFile : 通过fileId引用凭证文件
+    VerificationReview ..> StoredFile : 通过materialFileId引用认证材料
     Evaluation ..> PickupRequest : businessType=PICKUP_REQUEST,businessId
     User "1" --> "*" Evaluation : 发出/收到
     User "1" --> "*" NotificationRecord : 接收
@@ -17,14 +18,14 @@ classDiagram
         +String realName
         +String nickname
         +Long avatarFileId
-        +Long verificationFileId
+        +String phone
         +AuthStatus authStatus
         +UserRole role
         +Long pointBalance
         +LocalDate lastCheckInDate
-        +markAuthSubmitted(studentId, realName, fileId)
-        +markAuthApproved()
-        +markAuthRejected(reason)
+        +markAuthSubmitted()
+        +markAuthApproved(studentId, realName)
+        +markAuthRejected()
         +updateProfile(nickname, avatarFileId, college, contact)
         +canParticipatePickup()
         +deductPoints(amount)
@@ -34,6 +35,9 @@ classDiagram
     class VerificationReview {
         +Long id
         +Long userId
+        +Long materialFileId
+        +String submittedStudentId
+        +String submittedRealName
         +ReviewStatus status
         +Long reviewerId
         +String rejectReason

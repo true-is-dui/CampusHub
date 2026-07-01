@@ -1609,6 +1609,147 @@ paths:
                 data: null
                 errors:
                   reason: PICKUP_EVALUATION_NOT_ALLOWED
+    get:
+      tags:
+      - Evaluations
+      summary: 查询代取服务的双方评价列表
+      description: 返回该代取服务上已提交的评价列表（含评价者与被评价者身份和完整内容）。仅服务参与者可见。
+      parameters:
+      - "$ref": "#/components/parameters/PickupIdPath"
+      responses:
+        '200':
+          description: 评价列表
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        "$ref": "#/components/schemas/PickupEvaluationItem"
+              example:
+                code: 0
+                message: ok
+                data:
+                - evaluationId: 1
+                  reviewer:
+                    userId: 1
+                    nickname: string
+                  reviewerRoleInBusiness: PUBLISHER
+                  reviewee:
+                    userId: 2
+                    nickname: string
+                  revieweeRoleInBusiness: ACCEPTOR
+                  ratingLevel: GOOD
+                  content: string
+                  createdAt: '2026-06-02T10:00:00'
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+        '403':
+          description: 非服务参与者
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40301
+                message: 无权限或账号状态不允许
+                data: null
+                errors:
+                  reason: NOT_PICKUP_PARTICIPANT
+        '404':
+          description: 代取服务不存在
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40401
+                message: 资源不存在
+                data: null
+                errors:
+                  reason: RESOURCE_NOT_FOUND
+  "/pickup-requests/{pickupId}/received-evaluation":
+    get:
+      tags:
+      - Evaluations
+      summary: 查询当前用户在代取服务中收到的评价
+      description: 返回当前登录用户在该代取服务中作为被评价方收到的评价详情，供评价通知跳转展示。仅服务参与者可见。
+      parameters:
+      - "$ref": "#/components/parameters/PickupIdPath"
+      responses:
+        '200':
+          description: 收到的评价详情；若尚未收到评价，data 为 null
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      "$ref": "#/components/schemas/ReceivedEvaluationDetail"
+              example:
+                code: 0
+                message: ok
+                data:
+                  evaluationId: 1
+                  reviewer:
+                    userId: 1
+                    nickname: string
+                  revieweeRoleInBusiness: ACCEPTOR
+                  ratingLevel: GOOD
+                  content: string
+                  createdAt: '2026-06-02T10:00:00'
+        '401':
+          description: 未登录或Token过期
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40101
+                message: 未登录或登录已过期
+                data: null
+                errors:
+                  reason: TOKEN_MISSING_OR_EXPIRED
+        '403':
+          description: 非服务参与者
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40301
+                message: 无权限或账号状态不允许
+                data: null
+                errors:
+                  reason: NOT_PICKUP_PARTICIPANT
+        '404':
+          description: 代取服务不存在
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/ErrorResponse"
+              example:
+                code: 40401
+                message: 资源不存在
+                data: null
+                errors:
+                  reason: RESOURCE_NOT_FOUND
   "/pickup-requests/{pickupId}/evaluation-eligibility":
     get:
       tags:
@@ -2372,6 +2513,46 @@ components:
             type: array
             items:
               "$ref": "#/components/schemas/EvaluationHistorySummary"
+    ReceivedEvaluationDetail:
+      type: object
+      properties:
+        evaluationId:
+          type: integer
+          format: int64
+        reviewer:
+          "$ref": "#/components/schemas/UserSummary"
+        revieweeRoleInBusiness:
+          "$ref": "#/components/schemas/PickupParticipantRole"
+        ratingLevel:
+          "$ref": "#/components/schemas/RatingLevel"
+        content:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    PickupEvaluationItem:
+      type: object
+      properties:
+        evaluationId:
+          type: integer
+          format: int64
+        reviewer:
+          "$ref": "#/components/schemas/UserSummary"
+        reviewerRoleInBusiness:
+          "$ref": "#/components/schemas/PickupParticipantRole"
+        reviewee:
+          "$ref": "#/components/schemas/UserSummary"
+        revieweeRoleInBusiness:
+          "$ref": "#/components/schemas/PickupParticipantRole"
+        ratingLevel:
+          "$ref": "#/components/schemas/RatingLevel"
+        content:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
     RatingSummary:
       type: object
       description: 按被评价人在代取服务中的角色分别动态聚合计算，不缓存结果。publisherRoleSummary 表示该用户作为发布方时收到的评价统计；acceptorRoleSummary 表示该用户作为接单方时收到的评价统计。
