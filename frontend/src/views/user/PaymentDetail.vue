@@ -417,6 +417,7 @@ onUnmounted(() => {
   min-height: 180px;
   padding: 28px 24px;
   position: relative;
+  overflow: hidden;
 }
 
 .balance-icon-main {
