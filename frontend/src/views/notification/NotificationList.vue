@@ -134,6 +134,13 @@ async function handleRead(item) {
     router.push('/points')
   } else if (item.businessType === 'PICKUP_REQUEST' && item.businessId) {
     emit('navigate')
+    // 从代取通知进入详情时，把导航栏高亮定位到「历史订单」。
+    // 只写入最小标记，不携带过滤/分页状态，避免影响历史订单页的动画与筛选恢复。
+    try {
+      sessionStorage.setItem('campushub:my-pickups:return-state', '{}')
+    } catch {
+      // Storage failure should not block navigation.
+    }
     router.push(`/pickup/${item.businessId}`)
   }
 }
