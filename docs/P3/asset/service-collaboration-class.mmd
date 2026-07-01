@@ -1,14 +1,15 @@
 classDiagram
     AuthService --> User
     AuthService --> CurrentUserContext : 登录后生成请求上下文
+    AuthService --> NotificationService : 注册欢迎通知
 
     UserService --> User
-    UserService --> FileStorageService : 通过fileId读取头像/认证材料
-    UserService --> VerificationReviewService : 创建实名审核记录
+    UserService --> FileStorageService : 通过fileId读取头像
 
     VerificationReviewService --> VerificationReview
-    VerificationReviewService --> UserService : 回写认证状态
-    VerificationReviewService --> UserService : 读取实名信息和认证材料
+    VerificationReviewService --> UserService : 提交/回写认证状态、读取实名信息
+    VerificationReviewService --> FileStorageService : 保存/读取认证材料
+    VerificationReviewService --> PointService : 认证通过赠送积分
     VerificationReviewService --> NotificationService : 认证结果通知
 
     PickupService --> PickupRequest
@@ -18,50 +19,55 @@ classDiagram
     PickupService --> NotificationService : 接单/凭证/完成通知
     FileStorageService --> StoredFile : 维护文件元数据和上传溯源
 
-    UserService --> PointService : 认证赠送/每日签到
-    PointService --> User : 维护积分余额
+    PointService --> UserService : 读取/条件更新积分余额与签到日期
     PointService --> PointTransaction : 写入积分流水
 
     EvaluationService --> Evaluation
     EvaluationService --> PickupService : 查询评价上下文
+    EvaluationService --> UserService : 公开摘要
     EvaluationService --> NotificationService : 收到评价通知
 
     NotificationService --> NotificationRecord
 
     class AuthService {
-        +register(username, password)
-        +login(username, password)
-        +parseToken(token)
+        +register(username, rawPassword)
+        +login(username, rawPassword)
     }
 
     class UserService {
         +getCurrentUser(userId)
-        +getUserSummary(userId)
+        +getPublicProfile(userId)
+        +getUserBriefs(userIds)
         +loadAvatar(userId)
-        +updateProfile(userId, command)
-        +submitVerification(userId, studentId, realName, materialFileId)
-        +updateUserAuthStatus(userId, authStatus, reason)
+        +updateProfile(userId, nickname, avatar, college, contact)
+        +isStudentIdCertified(studentId, excludeUserId)
+        +markVerificationSubmitted(userId)
+        +markVerificationApproved(userId, studentId, realName)
+        +markVerificationRejected(userId)
         +ensureCertified(userId)
+        +getPointBalance(userId)
+        +applyPointChange(userId, delta, checkInDate)
     }
 
     class VerificationReviewService {
-        +createVerificationReview(userId)
-        +queryPendingReviews(pageQuery)
-        +approveReview(reviewId, adminId)
-        +rejectReview(reviewId, adminId, reason)
+        +submitVerification(userId, studentId, realName, verificationImage)
+        +queryReviews(admin, status, pageQuery)
+        +handleReview(admin, reviewId, request)
+        +loadReviewImage(admin, reviewId)
     }
 
     class PickupService {
-        +publishPickup(command, currentUserId)
+        +publishPickup(currentUserId, request, pickupCredential)
         +queryHall(campus, rewardType, pageQuery)
-        +queryDetail(pickupId, currentUserId)
-        +acceptPickup(pickupId, acceptorId)
-        +uploadCompletionProof(pickupId, acceptorId, fileId)
-        +confirmComplete(pickupId, publisherId)
-        +cancelPickup(pickupId, publisherId, reason)
-        +expireOpenPickups(now)
-        +queryMyPublished(userId, status, pageQuery)
-        +queryMyAccepted(userId, status, pageQuery)
+        +queryDetail(pickupId)
+        +loadPickupCredential(pickupId, currentUserId)
+        +acceptPickup(pickupId, currentUserId)
+        +uploadCompletionProof(pickupId, currentUserId, proofImage)
+        +loadCompletionProof(pickupId, currentUserId)
+        +confirmComplete(pickupId, currentUserId)
+        +cancelPickup(pickupId, currentUserId, cancelDetail)
+        +queryMyPublished(currentUserId, status, pageQuery)
+        +queryMyAccepted(currentUserId, status, pageQuery)
         +queryPickupEvaluationContext(pickupId)
     }
 
@@ -76,22 +82,23 @@ classDiagram
     }
 
     class FileStorageService {
-        +uploadImage(file, uploaderId, fileUsage)
+        +uploadImage(file, uploaderId, fileUsage, businessType, businessId)
         +loadFile(fileId)
-        +validateImage(file)
+        +updateBusinessTrace(fileId, businessType, businessId)
     }
 
     class EvaluationService {
-        +queryEvaluationEligibility(pickupId, reviewerId)
-        +submitEvaluation(pickupId, reviewerId, revieweeId, ratingLevel, content)
+        +queryEvaluationEligibility(pickupId, currentUserId)
+        +submitEvaluation(pickupId, currentUserId, request)
         +queryUserRatingSummary(userId)
-        +queryUserEvaluations(userId, revieweeRoleInBusiness, pageQuery)
-        +queryEvaluationDetail(evaluationId)
+        +queryUserEvaluations(userId, pageQuery)
+        +queryReceivedEvaluation(pickupId, currentUserId)
+        +queryPickupEvaluations(pickupId, currentUserId)
     }
 
     class NotificationService {
-        +createNotice(receiverId, type, content)
+        +createNotice(receiverId, type, title, content, businessType, businessId)
         +queryMyNotices(userId, pageQuery)
         +countUnread(userId)
-        +markRead(noticeId, userId)
+        +markRead(notificationId, userId)
     }
